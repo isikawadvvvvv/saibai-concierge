@@ -24,8 +24,8 @@ from linebot.v3.webhooks import (
 app = Flask(__name__)
 
 # LINEの秘密の鍵
-configuration = Configuration(access_token='7dQLyzXDVBh93eYIthjFLTNySlMBoL6rDts6RgChWxg1rmVT6XlniNcZqx3R7rukiAIgIE3Ki9CWwA+wWl8vciXlI8Wrb9aenRVRDV2UWK/HNJU9MJWR+y+/FvEhxe+VNeNLJ3pmqqIGquco2qLmkwdB04t89/1O/w1cDnyilFU=')
-handler = WebhookHandler('bd7f776cf56097724ce3c10ed2b3d5f2')
+configuration = Configuration(access_token=os.environ['LINE_CHANNEL_ACCESS_TOKEN'])
+handler = WebhookHandler(os.environ['LINE_CHANNEL_SECRET'])
 
 # ユーザーの状態を記憶する簡易データベース
 user_states = {}
