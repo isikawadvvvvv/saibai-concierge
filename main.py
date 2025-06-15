@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import requests
 import json
 import datetime
@@ -30,6 +33,28 @@ handler = WebhookHandler(os.environ['LINE_CHANNEL_SECRET'])
 # ユーザーの状態を記憶する簡易データベース
 user_states = {}
 
+# --- ▼▼▼ ここからが新しい知識 ▼▼▼ ---
+# 植物の成長データを格納するデータベース
+PLANT_DATABASE = {
+    'ミニトマト': {
+        'base_temp': 10.0,  # 生物学的下限温度
+        'events': [
+            {'gdd': 300, 'advice': '最初の追肥のタイミングです！'},
+            {'gdd': 600, 'advice': '実が大きくなる時期です。2回目の追肥を行いましょう。'},
+            {'gdd': 900, 'advice': '収穫の時期が近づいています！最初の実が赤くなり始めたら収穫開始です。'}
+        ]
+    },
+    'きゅうり': {
+        'base_temp': 12.0,
+        'events': [
+            {'gdd': 250, 'advice': '植え付けから約1ヶ月、最初の追肥のタイミングです。'},
+            {'gdd': 500, 'advice': '収穫が始まりました！ここからは2週間に1回のペースで追肥を続けましょう。'}
+        ]
+    }
+    # ここに、他の作物のデータを追加していく
+}
+# --- ▲▲▲ ここまでが新しい知識 ▲▲▲ ---
+
 # --- ここからが新しい神の視点（関数） ---
 def get_weather_data(start_date, end_date):
     """ 指定された期間の最高・最低気温データを取得する関数 """
@@ -48,7 +73,7 @@ def get_weather_data(start_date, end_date):
         print(f"APIリクエストエラー: {e}")
         return None
 
-def calculate_gdd(weather_data):
+def calculate_gdd(weather_data, base_temp=10.0): # base_tempを引数として受け取る
     """ 天気データから積算温度を計算する関数 """
     if not weather_data or 'daily' not in weather_data:
         return 0
@@ -57,9 +82,7 @@ def calculate_gdd(weather_data):
     min_temps = weather_data['daily']['temperature_2m_min']
     
     gdd = 0
-    # 生物学的下限温度（ミニトマトの場合）
-    base_temp = 10.0
-
+    
     for max_t, min_t in zip(max_temps, min_temps):
         if max_t is not None and min_t is not None:
             avg_temp = (max_t + min_t) / 2
@@ -67,7 +90,6 @@ def calculate_gdd(weather_data):
                 gdd += (avg_temp - base_temp)
     
     return gdd
-# --- ここまでが新しい神の視点（関数） ---
 
 
 @app.route("/callback", methods=['POST'])
@@ -87,39 +109,74 @@ def handle_message(event):
     user_id = event.source.user_id
     reply_text = ""
 
-    if user_message == "ミニトマト":
-        start_date = datetime.date.today()
-        user_states[user_id] = {
-            'plant': 'ミニトマト',
-            'start_date': start_date
-        }
-        reply_text = f"ミニトマトを登録しました！\n栽培開始日: {start_date.strftime('%Y年%m月%d日')}\n\n現在の状況を知りたい時は「状態」と送ってください。"
-        print(f"【登録完了】 User: {user_id}, Data: {user_states[user_id]}")
+     # ステップ1：まず、ユーザーが初めてか確認し、必要なら空のデータを作る
+    # これで、ユーザーは「顧客名簿」に登録される
+    if user_id not in user_states:
+        user_states[user_id] = {'plants': []}
 
-    elif user_message == "状態":
-        if user_id in user_states:
-            state = user_states[user_id]
-            plant_name = state['plant']
-            start_date = state['start_date']
+    # ステップ2：次に、顧客の「注文（コマンド）」を聞く
+    # これで、新規ユーザーの最初のメッセージも、コマンドとして正しく処理される
+    if 'を追加' in user_message:
+        print("「追加」コマンドを検知。")
+        plant_name = user_message.replace('を追加', '').strip()
+        new_plant = {'id': len(user_states[user_id]['plants']) + 1, 'name': plant_name, 'start_date': datetime.date.today()}
+        user_states[user_id]['plants'].append(new_plant)
+        reply_text = f"「{plant_name}」を新しい作物として登録しました！"
+        print(f"【作物追加】 User: {user_id}, New Data: {user_states[user_id]}")
+
+    elif 'の状態' in user_message:
+        print("「状態」コマンドを検知。")
+        # (このブロックの中身は、お前のコードのままで完璧なので省略)
+        plant_name_to_check = user_message.replace('の状態', '').strip()
+        found_plant = None
+        for p in user_states[user_id]['plants']:
+            if p['name'] == plant_name_to_check:
+                found_plant = p
+                break
+        if found_plant:
+            plant_name = found_plant['name']
+            start_date = found_plant['start_date']
             today = datetime.date.today()
-            
-            # 栽培日数の計算
-            days_passed = (today - start_date).days + 1
-
-            # 天気データを取得
-            weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
-            
-            if weather_data:
-                # 積算温度を計算
-                gdd = calculate_gdd(weather_data)
-                reply_text = f"【{plant_name}の栽培状況】\n栽培{days_passed}日目です。\n現在の積算温度は、約{gdd:.1f}℃・日です！"
+            if plant_name in PLANT_DATABASE:
+                plant_data = PLANT_DATABASE[plant_name]
+                base_temp = plant_data['base_temp']
+                weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+                if weather_data:
+                    gdd = calculate_gdd(weather_data, base_temp)
+                    next_event_advice = "全てのイベントが完了しました！"
+                    for ev in plant_data['events']:
+                        if gdd < ev['gdd']:
+                            next_event_advice = f"次のイベントは「{ev['advice']}」(積算温度: {ev['gdd']}℃・日)です。"
+                            break
+                    reply_text = f"【{plant_name}の栽培状況】\n栽培{(today - start_date).days + 1}日目\n現在の積算温度：約{gdd:.1f}℃・日\n\n{next_event_advice}"
+                else:
+                    reply_text = "申し訳ありません、気象データを取得できませんでした。"
             else:
-                reply_text = "申し訳ありません、気象データを取得できませんでした。"
+                reply_text = f"申し訳ありません、「{plant_name}」の栽培データがまだありません。"
         else:
-            reply_text = "まだ植物が登録されていません。「ミニトマト」と入力して栽培を開始してください。"
-            
+            reply_text = f"「{plant_name_to_check}」という作物は登録されていません。"
+
+    elif 'ヘルプ' in user_message.lower():
+        print("ヘルプコマンドを検知。")
+        reply_text = """【使い方ガイド】
+🌱作物の登録：「〇〇を追加」
+（例：ミニトマトを追加）
+
+📈状態の確認：「〇〇の状態」
+（例：ミニトマトの状態）"""
+
+    # どのコマンドにも一致しなかった場合
     else:
-        reply_text = "「ミニトマト」で栽培開始、「状態」で状況を確認できます。"
+        # 新規ユーザーの最初のメッセージがコマンドでない場合、ここでチュートリアルを返す
+        if len(user_states[user_id]['plants']) == 0:
+             reply_text = """はじめまして！
+僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
+
+まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
+（例：ミニトマトを追加）"""
+        else:
+            reply_text = "使い方が分からない場合は、「ヘルプ」と送ってみてくださいね。"
+
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
