@@ -20,7 +20,7 @@ from linebot.v3.messaging import (
     # ↓↓↓ BubbleContainer はこちらからインポートします ↓↓↓
     BubbleContainer
 )
-# ↓↓↓ FlexMessageの各コンポーネントはこちらの「models」からインポートします ↓↓↓
+
 from linebot.v3.messaging.models import (
     BoxComponent,
     TextComponent,
