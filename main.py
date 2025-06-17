@@ -14,7 +14,8 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    FlexMessage
+    FlexMessage,
+    FlexContainer # ← この一行が、最後の切り札だ
 )
 from linebot.v3.webhooks import (
     MessageEvent,
