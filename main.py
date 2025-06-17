@@ -55,17 +55,14 @@ from linebot.v3.messaging import (
     FlexMessage,
     ApiException,
     # ↓↓↓ BubbleContainer はこちらからインポートします ↓↓↓
-    BubbleContainer
+    
 )
 
 from linebot.v3.messaging.models import (
-    BoxComponent,
-    TextComponent,
-    ImageComponent,
     ButtonComponent,
     SeparatorComponent,
     PostbackAction,
-    FlexContainer
+    FlexContainer,
 )
 from supabase import create_client, Client
 
