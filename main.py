@@ -23,7 +23,6 @@ from linebot.v3.messaging import (
 
 from linebot.v3.messaging.models import (
     FlexComponent,
-    TextComponent,
     ImageComponent,
     ButtonComponent,
     SeparatorComponent,
