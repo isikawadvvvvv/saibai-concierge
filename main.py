@@ -1,3 +1,40 @@
+import sys
+import traceback
+
+print("="*30)
+print("== ライブラリの内部調査を開始します ==")
+print("="*30)
+
+try:
+    # 問題のモジュールの中身を直接確認する
+    import linebot.v3.messaging
+    print(">>> 'linebot.v3.messaging' のインポートには成功しました。")
+    print(">>> モジュールの中身を一覧表示します:")
+    # sorted()でアルファベット順に表示して見やすくする
+    print(sorted(dir(linebot.v3.messaging)))
+    print("---")
+    
+    # 本来のインポートを試みる
+    from linebot.v3.messaging import BubbleContainer
+    print(">>> 'BubbleContainer'のインポートに成功！")
+
+except ImportError:
+    print(">>> 'BubbleContainer' のインポートでエラーが発生しました。")
+    print("--- エラー詳細 ---")
+    # 詳細なエラー情報をログに出力する
+    traceback.print_exc(file=sys.stdout)
+    print("--------------------")
+
+except Exception as e:
+    print(f">>> 予期せぬエラーが発生しました: {e}")
+    traceback.print_exc(file=sys.stdout)
+
+finally:
+    print("="*30)
+    print("== ライブラリの内部調査を終了します ==")
+    print("="*30)
+
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,11 +55,12 @@ from linebot.v3.messaging import (
     FlexMessage,
     ApiException,
     # ↓↓↓ BubbleContainer はこちらからインポートします ↓↓↓
-    FlexContainer
+    BubbleContainer
 )
 
 from linebot.v3.messaging.models import (
-    FlexComponent,
+    BoxComponent,
+    TextComponent,
     ImageComponent,
     ButtonComponent,
     SeparatorComponent,
