@@ -104,17 +104,21 @@ def handle_message(event):
             reply_message_obj = TextMessage(text=f"「{plant_name}」を新しい作物として登録しました！")
         else:
             reply_message_obj = TextMessage(text="作物名を指定してください。（例：ミニトマトを追加）")
+     # 「〇〇の状態」というメッセージを検知
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
+        
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
         
         if plant_response.data:
             found_plant = plant_response.data[0]
             plant_name = found_plant['plant_name']
             
+            # 1. 設計図（JSONファイル）を読み込む
             with open('flex_message_templates/plant_status_card.json', 'r', encoding='utf-8') as f:
                 flex_template = json.load(f)
 
+            # 2. 設計図をユーザーのデータで書き換える
             plant_info_from_db = PLANT_DATABASE.get(plant_name)
             if plant_info_from_db:
                 flex_template['hero']['url'] = plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg')
@@ -135,14 +139,25 @@ def handle_message(event):
                     for ev in plant_info_from_db.get('events', []):
                         if gdd < ev['gdd']:
                             next_event_advice = f"次のイベントは「{ev['advice']}」(目安: {ev['gdd']}℃・日)"
+                            if 'product_name' in ev and 'affiliate_link' in ev:
+                                next_event_advice += f"\n\n💡ヒント：\nこのタイミングには「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                             break
                     flex_template['body']['contents'][2]['contents'][1]['text'] = next_event_advice
                 
-                # ボタンのデータに、どの植物に対するアクションかを埋め込む
                 for button in flex_template['footer']['contents']:
-                    if button['type'] == 'button':
+                    if button.get('action', {}).get('type') == 'postback':
                         button['action']['data'] = button['action']['data'].replace('__PLANT_ID__', str(found_plant['id']))
                 
+                # --- ▼▼▼ ここが最後の修正ポイント ▼▼▼ ---
+                # 3. 辞書データを、LINEライブラリが理解できる「FlexContainer」オブジェクトに変換する
+                flex_container_obj = FlexContainer.new_from_json_dict(flex_template)
+
+                # 4. FlexSendMessageオブジェクトを作成する。contentsには、変換したオブジェクトを入れる
+                reply_message_obj = FlexSendMessage(
+                    alt_text=f"{plant_name}の状態をお知らせします",
+                    contents=flex_container_obj # ここが flex_template から変わっている！
+                )
+                # --- ▲▲▲ ここまでが最後の修正ポイント ▲▲▲ ---
                 reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=flex_template)
             else:
                 reply_message_obj = TextMessage(text=f"「{plant_name}」の栽培データがありません。")
