@@ -14,7 +14,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    FlexSendMessage
+    FlexMessage
 )
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -143,7 +143,7 @@ def handle_message(event):
                     if button['type'] == 'button':
                         button['action']['data'] = button['action']['data'].replace('__PLANT_ID__', str(found_plant['id']))
                 
-                reply_message_obj = FlexSendMessage(alt_text=f"{plant_name}の状態", contents=flex_template)
+                reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=flex_template)
             else:
                 reply_message_obj = TextMessage(text=f"「{plant_name}」の栽培データがありません。")
         else:
