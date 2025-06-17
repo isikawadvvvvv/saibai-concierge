@@ -1,39 +1,29 @@
 import sys
 import traceback
 
-print("="*30)
-print("== ライブラリの内部調査を開始します ==")
-print("="*30)
+print("="*40)
+print("== 'models'サブモジュールの内部調査を開始 == ")
+print("="*40)
 
 try:
-    # 問題のモジュールの中身を直接確認する
-    import linebot.v3.messaging
-    print(">>> 'linebot.v3.messaging' のインポートには成功しました。")
-    print(">>> モジュールの中身を一覧表示します:")
-    # sorted()でアルファベット順に表示して見やすくする
-    print(sorted(dir(linebot.v3.messaging)))
-    print("---")
-    
-    # 本来のインポートを試みる
-    from linebot.v3.messaging import BubbleContainer
-    print(">>> 'BubbleContainer'のインポートに成功！")
+    # 今回の調査対象である 'models' サブモジュールをインポートします
+    import linebot.v3.messaging.models as models_submodule
 
-except ImportError:
-    print(">>> 'BubbleContainer' のインポートでエラーが発生しました。")
-    print("--- エラー詳細 ---")
-    # 詳細なエラー情報をログに出力する
-    traceback.print_exc(file=sys.stdout)
-    print("--------------------")
+    print(">>> 'linebot.v3.messaging.models' のインポートに成功しました。")
+    print(">>> 以下に、'models' の中身をすべて表示します:")
+    print("-" * 20)
+    # sorted()でアルファベット順に表示して見やすくします
+    print(sorted(dir(models_submodule)))
+    print("-" * 20)
 
 except Exception as e:
-    print(f">>> 予期せぬエラーが発生しました: {e}")
+    print(f">>> 調査中にエラーが発生しました: {e}")
     traceback.print_exc(file=sys.stdout)
 
 finally:
-    print("="*30)
-    print("== ライブラリの内部調査を終了します ==")
-    print("="*30)
-
+    print("="*40)
+    print("== 'models'サブモジュールの内部調査を終了 == ")
+    print("="*40)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -45,6 +35,9 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+# ----------------------------------------------------------------
+# Messaging APIの基本的な機能や、メッセージの大きな枠組みはこちらから
+# ----------------------------------------------------------------
 from linebot.v3.messaging import (
     Configuration,
     ApiClient,
@@ -53,15 +46,19 @@ from linebot.v3.messaging import (
     TextMessage,
     FlexMessage,
     ApiException,
-    # ↓↓↓ 名前が変更された FlexBubble をインポートします
     FlexBubble,
-    # ↓↓↓ FlexMessageの各部品(コンポーネント)をインポートします
+    PostbackAction
+)
+
+# ----------------------------------------------------------------
+# Flex Messageの「部品（コンポーネント）」はこちらの .models から
+# ----------------------------------------------------------------
+from linebot.v3.messaging.models import (
     BoxComponent,
     TextComponent,
     ImageComponent,
     ButtonComponent,
-    SeparatorComponent,
-    PostbackAction
+    SeparatorComponent
 )
 from supabase import create_client, Client
 
@@ -173,7 +170,7 @@ def handle_message(event):
                             recommendation_text = f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                         break
 
-                # ↓↓↓ ここが修正箇所です！ BubbleContainer -> FlexBubble に変更
+               
                 bubble = FlexBubble(
                     hero=ImageComponent(url=plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
                     body=BoxComponent(
