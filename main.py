@@ -6,11 +6,11 @@ import datetime
 import requests
 import json
 from flask import Flask, request, abort
-
-# --- ▼▼▼ ここが、全ての過ちを正す、最終的なインポート文だ ▼▼▼ ---
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+
+# --- ▼▼▼ ここが、全ての過ちを正す、最終的なインポート文だ ▼▼▼ ---
 from linebot.v3.messaging import (
     Configuration,
     ApiClient,
@@ -19,8 +19,8 @@ from linebot.v3.messaging import (
     TextMessage,
     FlexMessage
 )
-# BubbleContainerは、倉庫の奥深く、'models'の棚から持ってくる
-from linebot.v3.messaging.models.bubble_container import BubbleContainer
+# BubbleContainerは、messagingではなく、flex_messageという専門の保管庫から持ってくる！
+from linebot.v3.flex_message import BubbleContainer
 # --- ▲▲▲ ここまでが、全ての過ちを正す、最終的なインポート文だ ▲▲▲ ---
 
 from supabase import create_client, Client
@@ -99,10 +99,15 @@ def handle_message(event):
 （例：ミニトマトを追加）""")
     elif 'を追加' in user_message:
         plant_name = user_message.replace('を追加', '').strip()
-        if plant_name:
+        if plant_name and plant_name in PLANT_DATABASE:
             new_plant = {'user_id': user_id, 'plant_name': plant_name, 'start_date': str(datetime.date.today())}
             supabase.table('user_plants').insert(new_plant).execute()
             reply_message_obj = TextMessage(text=f"「{plant_name}」を新しい作物として登録しました！")
+        elif plant_name:
+            reply_message_obj = TextMessage(text=f"申し訳ありません、「{plant_name}」の栽培データはまだありません。")
+        else:
+            reply_message_obj = TextMessage(text="作物名を指定してください。（例：ミニトマトを追加）")
+            
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
@@ -130,7 +135,7 @@ def handle_message(event):
                     gdd = calculate_gdd(weather_data, base_temp)
                     flex_template['body']['contents'][1]['contents'][1]['contents'][1]['text'] = f"{gdd:.1f}℃・日"
                     
-                    next_event_advice = "全てのイベントが完了しました！"
+                    next_event_advice = "全てのイベントが完了しました！収穫を楽しんでください。"
                     for ev in plant_info_from_db.get('events', []):
                         if gdd < ev['gdd']:
                             next_event_advice = f"次のイベントは「{ev['advice']}」"
@@ -145,8 +150,6 @@ def handle_message(event):
                 
                 bubble_container = BubbleContainer.new_from_json_dict(flex_template)
                 reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble_container)
-            else:
-                reply_message_obj = TextMessage(text=f"「{plant_name}」の栽培データがありません。")
         else:
             reply_message_obj = TextMessage(text=f"「{plant_name_to_check}」は登録されていません。")
     else:
@@ -169,7 +172,6 @@ def handle_postback(event):
     if action_type and plant_id:
         action_log = {'user_plant_id': int(plant_id), 'action_type': action_type}
         supabase.table('plant_actions').insert(action_log).execute()
-        print(f"【行動記録】 User: {user_id}, Action: {action_log}")
         
         if action_type == 'log_watering':
             reply_text = '水やりを記録しました！'
