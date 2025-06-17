@@ -18,7 +18,7 @@ from linebot.v3.messaging import (
     FlexMessage,
     ApiException,
     # ↓↓↓ BubbleContainer はこちらからインポートします ↓↓↓
-    BubbleContainer
+    FlexContainer
 )
 
 from linebot.v3.messaging.models import (
