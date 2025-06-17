@@ -8,7 +8,14 @@ import json
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, TextMessage
+from linebot.v3.messaging import (
+    Configuration,
+    ApiClient,
+    MessagingApi,
+    ReplyMessageRequest,
+    TextMessage,
+    FlexSendMessage # FlexMessageを送信するために、これを追加
+)
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from supabase import create_client, Client
 
@@ -24,13 +31,27 @@ supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# 植物データベース（これは変更なし）
+# 植物の成長データを格納するデータベース
 PLANT_DATABASE = {
-    'ミニトマト': { 'base_temp': 10.0, 'events': [ {'gdd': 300, 'advice': '最初の追肥のタイミングです！'}, {'gdd': 900, 'advice': '収穫の時期が近づいています！'} ]},
-    'きゅうり': { 'base_temp': 12.0, 'events': [ {'gdd': 250, 'advice': '最初の追肥のタイミングです。'}, {'gdd': 500, 'advice': '収穫が始まりました！'} ]}
+    'ミニトマト': {
+        'base_temp': 10.0,
+        'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg', # 画像URLを追加
+        'events': [
+            {'gdd': 300, 'advice': '最初の追肥のタイミングです！', 'product_name': 'トマトの追肥用肥料', 'affiliate_link': '【ここにAmazonで取得した商品リンクを入れる】'},
+            {'gdd': 900, 'advice': '収穫の時期が近づいています！'}
+        ]
+    },
+    'きゅうり': {
+        'base_temp': 12.0,
+        'image_url': 'https://www.shuminoengei.jp/images/concierge/qa_plant_image/296_001.jpg', # 画像URLを追加
+        'events': [
+            {'gdd': 250, 'advice': '最初の追肥のタイミングです。'},
+            {'gdd': 500, 'advice': '収穫が始まりました！'}
+        ]
+    }
 }
 
-# --- ヘルパー関数（これも変更なし） ---
+# --- ヘルパー関数 ---
 def get_weather_data(start_date, end_date):
     url = f"https://api.open-meteo.com/v1/forecast?latitude=35.66&longitude=139.65&daily=temperature_2m_max,temperature_2m_min&start_date={start_date}&end_date={end_date}&timezone=Asia%2FTokyo"
     try:
@@ -65,59 +86,85 @@ def callback():
 def handle_message(event):
     user_id = event.source.user_id
     user_message = event.message.text
-    reply_text = ""
+    
+    # 返信用のメッセージオブジェクトを準備（最初は空）
+    reply_message = None
 
-    # --- ▼▼▼ ここからがデータベースを使った新しいロジック ▼▼▼ ---
-
-    # 1. ユーザーがDBに存在するか確認、存在しなければ新規登録
+    # ユーザーがDBに存在するか確認、存在しなければ新規登録してチュートリアルを返す
     user_response = supabase.table('users').select('id').eq('id', user_id).execute()
     if not user_response.data:
-        print(f"新規ユーザーを検知。DBに登録します: {user_id}")
         supabase.table('users').insert({'id': user_id}).execute()
-        # 初回メッセージはここで確定
-        reply_text = "はじめまして！「栽培コンシェルジュ」です。まずは育てたい作物を「〇〇を追加」と送って登録してください。（例：ミニトマトを追加）"
+        reply_message = TextMessage(text="""はじめまして！
+僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
 
-    # 2. コマンド処理
-    if 'を追加' in user_message:
+まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
+（例：ミニトマトを追加）""")
+
+    # --- コマンド処理 ---
+    elif 'を追加' in user_message:
         plant_name = user_message.replace('を追加', '').strip()
         if plant_name:
             new_plant = {'user_id': user_id, 'plant_name': plant_name, 'start_date': str(datetime.date.today())}
             supabase.table('user_plants').insert(new_plant).execute()
-            reply_text = f"「{plant_name}」を新しい作物として登録しました！"
-            print(f"【DB記録完了】{new_plant}")
+            reply_message = TextMessage(text=f"「{plant_name}」を新しい作物として登録しました！")
         else:
-            reply_text = "作物名を指定してください。（例：ミニトマトを追加）"
+            reply_message = TextMessage(text="作物名を指定してください。（例：ミニトマトを追加）")
 
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
-        # DBからユーザーが育てている特定の植物の情報を取得
-        plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).execute()
+        plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
         
         if plant_response.data:
             found_plant = plant_response.data[0]
-            start_date = datetime.datetime.strptime(found_plant['start_date'], '%Y-%m-%d').date()
-            today = datetime.date.today()
-            # (以下、積算温度の計算と神託のロジックは前回と同じなので省略)
-            # ...
-            reply_text = f"【{found_plant['plant_name']}の栽培状況】\n... (ここに神託メッセージが入る)"
+            plant_name = found_plant['plant_name']
+            
+            # 1. 設計図（JSONファイル）を読み込む
+            with open('flex_message_templates/plant_status_card.json', 'r', encoding='utf-8') as f:
+                flex_template = json.load(f)
 
+            # 2. 設計図をユーザーのデータで書き換える
+            plant_info_from_db = PLANT_DATABASE.get(plant_name)
+            if plant_info_from_db:
+                # 画像をセット
+                flex_template['hero']['url'] = plant_info_from_db['image_url']
+                # 植物名をセット
+                flex_template['body']['contents'][0]['text'] = f"{plant_name}の栽培状況"
+                
+                # 栽培日数を計算してセット
+                start_date = datetime.datetime.strptime(found_plant['start_date'], '%Y-%m-%d').date()
+                today = datetime.date.today()
+                days_passed = (today - start_date).days + 1
+                flex_template['body']['contents'][1]['contents'][0]['contents'][1]['text'] = f"{days_passed}日目"
+
+                # 積算温度を計算してセット
+                weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+                if weather_data:
+                    base_temp = plant_info_from_db['base_temp']
+                    gdd = calculate_gdd(weather_data, base_temp)
+                    flex_template['body']['contents'][1]['contents'][1]['contents'][1]['text'] = f"{gdd:.1f}℃・日"
+                
+                # 3. FlexMessageオブジェクトを作成
+                reply_message = FlexSendMessage(alt_text=f"{plant_name}の状態をお知らせします", contents=flex_template)
+
+            else: # PLANT_DATABASEに情報がない場合
+                reply_message = TextMessage(text=f"申し訳ありません、「{plant_name}」の栽培データがまだありません。")
         else:
-            reply_text = f"「{plant_name_to_check}」という作物は登録されていません。"
+            reply_message = TextMessage(text=f"「{plant_name_to_check}」という作物は登録されていません。")
 
-    elif 'ヘルプ' in user_message.lower():
-        reply_text = "【使い方ガイド】\n🌱作物の登録：「〇〇を追加」\n📈状態の確認：「〇〇の状態」"
-    
-    # 初回メッセージ以外で、コマンドが不明な場合
-    elif not reply_text:
-        reply_text = "使い方が分からない場合は、「ヘルプ」と送ってみてくださいね。"
-    
-    # 3. メッセージを返信
-    with ApiClient(line_config) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message_with_http_info(
-            ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply_text)])
-        )
+    else: # どのコマンドにも一致しない場合
+        reply_message = TextMessage(text="「〇〇を追加」で登録、「〇〇の状態」で確認できます。使い方が分からない場合は「ヘルプ」と送ってください。")
 
-# --- サーバー起動 ---
+    # --- メッセージ送信 ---
+    # reply_messageに何かしらメッセージがセットされていれば、それを送信する
+    if reply_message:
+        with ApiClient(line_config) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[reply_message]
+                )
+            )
+
 if __name__ == "__main__":
     app.run(port=5001)
