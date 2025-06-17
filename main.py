@@ -1,30 +1,3 @@
-import sys
-import traceback
-
-print("="*40)
-print("== 'models'サブモジュールの内部調査を開始 == ")
-print("="*40)
-
-try:
-    # 今回の調査対象である 'models' サブモジュールをインポートします
-    import linebot.v3.messaging.models as models_submodule
-
-    print(">>> 'linebot.v3.messaging.models' のインポートに成功しました。")
-    print(">>> 以下に、'models' の中身をすべて表示します:")
-    print("-" * 20)
-    # sorted()でアルファベット順に表示して見やすくします
-    print(sorted(dir(models_submodule)))
-    print("-" * 20)
-
-except Exception as e:
-    print(f">>> 調査中にエラーが発生しました: {e}")
-    traceback.print_exc(file=sys.stdout)
-
-finally:
-    print("="*40)
-    print("== 'models'サブモジュールの内部調査を終了 == ")
-    print("="*40)
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -52,13 +25,14 @@ from linebot.v3.messaging import (
 
 # ----------------------------------------------------------------
 # Flex Messageの「部品（コンポーネント）」はこちらの .models から
+# 全ての名前を Flex*** に修正しました！
 # ----------------------------------------------------------------
 from linebot.v3.messaging.models import (
-    BoxComponent,
-    TextComponent,
-    ImageComponent,
-    ButtonComponent,
-    SeparatorComponent
+    FlexBox,
+    FlexText,
+    FlexImage,
+    FlexButton,
+    FlexSeparator
 )
 from supabase import create_client, Client
 
@@ -170,31 +144,31 @@ def handle_message(event):
                             recommendation_text = f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                         break
 
-               
+                # ↓↓↓ ここもすべて Flex*** に修正しました！
                 bubble = FlexBubble(
-                    hero=ImageComponent(url=plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
-                    body=BoxComponent(
+                    hero=FlexImage(url=plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
+                    body=FlexBox(
                         layout='vertical',
                         contents=[
-                            TextComponent(text=f"{plant_name}の栽培状況", weight='bold', size='xl'),
-                            BoxComponent(
+                            FlexText(text=f"{plant_name}の栽培状況", weight='bold', size='xl'),
+                            FlexBox(
                                 layout='vertical', margin='lg', spacing='sm',
                                 contents=[
-                                    BoxComponent(layout='baseline', spacing='sm', contents=[
-                                            TextComponent(text='栽培日数', color='#aaaaaa', size='sm', flex=2),
-                                            TextComponent(text=f"{days_passed}日目", wrap=True, color='#666666', size='sm', flex=5) ]),
-                                    BoxComponent(layout='baseline', spacing='sm', contents=[
-                                            TextComponent(text='積算温度', color='#aaaaaa', size='sm', flex=2),
-                                            TextComponent(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5) ])]),
-                            BoxComponent(layout='vertical', margin='lg', contents=[
-                                    TextComponent(text='次のイベント', size='md', weight='bold'),
-                                    TextComponent(text=next_event_advice, wrap=True, margin='md'),
-                                    TextComponent(text=recommendation_text, wrap=True, margin='sm', size='sm') ])]),
-                    footer=BoxComponent(
+                                    FlexBox(layout='baseline', spacing='sm', contents=[
+                                            FlexText(text='栽培日数', color='#aaaaaa', size='sm', flex=2),
+                                            FlexText(text=f"{days_passed}日目", wrap=True, color='#666666', size='sm', flex=5) ]),
+                                    FlexBox(layout='baseline', spacing='sm', contents=[
+                                            FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=2),
+                                            FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5) ])]),
+                            FlexBox(layout='vertical', margin='lg', contents=[
+                                    FlexText(text='次のイベント', size='md', weight='bold'),
+                                    FlexText(text=next_event_advice, wrap=True, margin='md'),
+                                    FlexText(text=recommendation_text, wrap=True, margin='sm', size='sm') ])]),
+                    footer=FlexBox(
                         layout='vertical', spacing='sm',
                         contents=[
-                            ButtonComponent(style='link', height='sm', action=PostbackAction(label="💧 水やりを記録する", data=f"action=log_watering&plant_id={found_plant['id']}")),
-                            ButtonComponent(style='link', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={found_plant['id']}"))
+                            FlexButton(style='link', height='sm', action=PostbackAction(label="💧 水やりを記録する", data=f"action=log_watering&plant_id={found_plant['id']}")),
+                            FlexButton(style='link', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={found_plant['id']}"))
                         ]))
                 reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble)
         else:
