@@ -9,20 +9,14 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
-
-# --- ▼▼▼ ここが、全ての過ちを正す、最終的なインポート文だ ▼▼▼ ---
 from linebot.v3.messaging import (
     Configuration,
     ApiClient,
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    FlexMessage
+    FlexMessage  # 必要なのは、実はこれだけだった
 )
-# BubbleContainerは、messagingではなく、flex_messageという専門の保管庫から持ってくる！
-from linebot.v3.flex_message import BubbleContainer
-# --- ▲▲▲ ここまでが、全ての過ちを正す、最終的なインポート文だ ▲▲▲ ---
-
 from supabase import create_client, Client
 
 # --- 初期設定 ---
@@ -107,7 +101,6 @@ def handle_message(event):
             reply_message_obj = TextMessage(text=f"申し訳ありません、「{plant_name}」の栽培データはまだありません。")
         else:
             reply_message_obj = TextMessage(text="作物名を指定してください。（例：ミニトマトを追加）")
-            
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
@@ -121,35 +114,36 @@ def handle_message(event):
 
             plant_info_from_db = PLANT_DATABASE.get(plant_name)
             if plant_info_from_db:
+                # テンプレートをパーソナライズ
                 flex_template['hero']['url'] = plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg')
                 flex_template['body']['contents'][0]['text'] = f"{plant_name}の栽培状況"
-                
                 start_date = datetime.datetime.strptime(found_plant['start_date'], '%Y-%m-%d').date()
                 today = datetime.date.today()
                 days_passed = (today - start_date).days + 1
                 flex_template['body']['contents'][1]['contents'][0]['contents'][1]['text'] = f"{days_passed}日目"
-
                 weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
                 if weather_data:
-                    base_temp = plant_info_from_db['base_temp']
-                    gdd = calculate_gdd(weather_data, base_temp)
+                    gdd = calculate_gdd(weather_data, plant_info_from_db['base_temp'])
                     flex_template['body']['contents'][1]['contents'][1]['contents'][1]['text'] = f"{gdd:.1f}℃・日"
-                    
-                    next_event_advice = "全てのイベントが完了しました！収穫を楽しんでください。"
+                    next_event_advice = "全てのイベントが完了しました！"
                     for ev in plant_info_from_db.get('events', []):
                         if gdd < ev['gdd']:
                             next_event_advice = f"次のイベントは「{ev['advice']}」"
-                            if 'product_name' in ev and 'affiliate_link' in ev:
-                                next_event_advice += f"\n\n💡ヒント：\nこのタイミングには「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
+                            if 'product_name' in ev:
+                                next_event_advice += f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。"
                             break
                     flex_template['body']['contents'][2]['contents'][1]['text'] = next_event_advice
-                
                 for button in flex_template['footer']['contents']:
                     if button.get('action', {}).get('type') == 'postback':
                         button['action']['data'] = button['action']['data'].replace('__PLANT_ID__', str(found_plant['id']))
                 
-                bubble_container = BubbleContainer.new_from_json_dict(flex_template)
-                reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble_container)
+                # --- ▼▼▼ ここが、最もシンプルで、正しい最終形態 ▼▼▼ ---
+                # 辞書データを、そのままcontentsに渡す！
+                reply_message_obj = FlexMessage(
+                    alt_text=f"{plant_name}の状態",
+                    contents=flex_template
+                )
+                # --- ▲▲▲ ここまでが、最もシンプルで、正しい最終形態 ▲▲▲ ---
         else:
             reply_message_obj = TextMessage(text=f"「{plant_name_to_check}」は登録されていません。")
     else:
@@ -167,17 +161,14 @@ def handle_postback(event):
     params = dict(p.split('=') for p in postback_data_str.split('&'))
     action_type = params.get('action')
     plant_id = params.get('plant_id')
-
     reply_text = "エラーが発生しました。"
     if action_type and plant_id:
         action_log = {'user_plant_id': int(plant_id), 'action_type': action_type}
         supabase.table('plant_actions').insert(action_log).execute()
-        
         if action_type == 'log_watering':
             reply_text = '水やりを記録しました！'
         elif action_type == 'log_fertilizer':
             reply_text = '追肥を記録しました！'
-
     with ApiClient(line_config) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply_text)]))
