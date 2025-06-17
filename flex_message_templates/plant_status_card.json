@@ -2,7 +2,7 @@
   "type": "bubble",
   "hero": {
     "type": "image",
-    "url": "https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg",
+    "url": "https://example.com/placeholder.jpg",
     "size": "full",
     "aspectRatio": "20:13",
     "aspectMode": "cover"
@@ -13,7 +13,7 @@
     "contents": [
       {
         "type": "text",
-        "text": "ミニトマトの栽培状況",
+        "text": "プラント名",
         "weight": "bold",
         "size": "xl"
       },
@@ -37,7 +37,7 @@
               },
               {
                 "type": "text",
-                "text": "35日目",
+                "text": "N日目",
                 "wrap": true,
                 "color": "#666666",
                 "size": "sm",
@@ -59,13 +59,32 @@
               },
               {
                 "type": "text",
-                "text": "350.5℃・日",
+                "text": "---.-℃・日",
                 "wrap": true,
                 "color": "#666666",
                 "size": "sm",
                 "flex": 5
               }
             ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "vertical",
+        "margin": "lg",
+        "contents": [
+          {
+            "type": "text",
+            "text": "次のイベント",
+            "size": "md",
+            "weight": "bold"
+          },
+          {
+            "type": "text",
+            "text": "次のイベントのアドバイスがここに入ります。",
+            "wrap": true,
+            "margin": "md"
           }
         ]
       }
@@ -81,9 +100,9 @@
         "style": "link",
         "height": "sm",
         "action": {
-          "type": "message",
-          "label": "水やりを記録する",
-          "text": "水やり記録"
+          "type": "postback",
+          "label": "💧 水やりを記録する",
+          "data": "action=log_watering&plant_id=__PLANT_ID__"
         }
       },
       {
@@ -91,16 +110,10 @@
         "style": "link",
         "height": "sm",
         "action": {
-          "type": "message",
-          "label": "追肥を記録する",
-          "text": "追肥記録"
+          "type": "postback",
+          "label": "🌱 追肥を記録する",
+          "data": "action=log_fertilizer&plant_id=__PLANT_ID__"
         }
-      },
-      {
-        "type": "box",
-        "layout": "vertical",
-        "contents": [],
-        "margin": "sm"
       }
     ],
     "flex": 0
