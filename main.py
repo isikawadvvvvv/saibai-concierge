@@ -14,7 +14,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    FlexSendMessage # FlexMessageを送信するために、これを追加
+    FlexMessage # FlexMessageを送信するために、これを追加
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from supabase import create_client, Client
@@ -144,7 +144,7 @@ def handle_message(event):
                     flex_template['body']['contents'][1]['contents'][1]['contents'][1]['text'] = f"{gdd:.1f}℃・日"
                 
                 # 3. FlexMessageオブジェクトを作成
-                reply_message = FlexSendMessage(alt_text=f"{plant_name}の状態をお知らせします", contents=flex_template)
+                reply_message = FlexMessage(alt_text=f"{plant_name}の状態をお知らせします", contents=flex_template)
 
             else: # PLANT_DATABASEに情報がない場合
                 reply_message = TextMessage(text=f"申し訳ありません、「{plant_name}」の栽培データがまだありません。")
