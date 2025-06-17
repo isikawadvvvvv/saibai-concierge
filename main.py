@@ -9,6 +9,8 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+
+# --- ▼▼▼ これが、お前のターミナルが証明した、唯一の正しいインポート文だ ▼▼▼ ---
 from linebot.v3.messaging import (
     Configuration,
     ApiClient,
@@ -16,8 +18,18 @@ from linebot.v3.messaging import (
     ReplyMessageRequest,
     TextMessage,
     FlexMessage,
-    ApiException
+    ApiException,
+    # --- Flex Messageを構成する、実在が確認された全ての部品 ---
+    FlexBubble,
+    FlexBox,
+    FlexText,
+    FlexImage,
+    FlexButton,
+    FlexSeparator,
+    PostbackAction
 )
+# --- ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ ---
+
 from supabase import create_client, Client
 
 # --- 初期設定 ---
@@ -30,7 +42,7 @@ supabase: Client = create_client(supabase_url, supabase_key)
 
 # (PLANT_DATABASEとヘルパー関数は変更なし)
 PLANT_DATABASE = {
-    'ミニトマト': { 'base_temp': 10.0, 'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg', 'events': [ {'gdd': 300, 'advice': '最初の追肥のタイミングです！'}, {'gdd': 900, 'advice': '収穫の時期が近づいています！'} ]},
+    'ミニトマト': { 'base_temp': 10.0, 'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg', 'events': [ {'gdd': 300, 'advice': '最初の追肥のタイミングです！', 'product_name': 'トマトの追肥用肥料', 'affiliate_link': 'https://amzn.to/40aoawy'}, {'gdd': 900, 'advice': '収穫の時期が近づいています！'} ]},
     'きゅうり': { 'base_temp': 12.0, 'image_url': 'https://www.shuminoengei.jp/images/concierge/qa_plant_image/296_001.jpg', 'events': [ {'gdd': 250, 'advice': '最初の追肥のタイミングです。'}, {'gdd': 500, 'advice': '収穫が始まりました！'} ]}
 }
 def get_weather_data(start_date, end_date):
@@ -68,7 +80,16 @@ def handle_message(event):
     user_message = event.message.text
     reply_message_obj = None
 
-    if 'の状態' in user_message:
+    # ユーザーがDBに存在するか確認、存在しなければ新規登録
+    user_response = supabase.table('users').select('id').eq('id', user_id).execute()
+    if not user_response.data:
+        supabase.table('users').insert({'id': user_id}).execute()
+        reply_message_obj = TextMessage(text="""はじめまして！
+僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
+まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
+（例：ミニトマトを追加）""")
+
+    elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
         
@@ -78,11 +99,7 @@ def handle_message(event):
             plant_info_from_db = PLANT_DATABASE.get(plant_name)
             
             if plant_info_from_db:
-                # 1. 設計図（JSON）を文字列として読み込む
-                with open('flex_message_templates/plant_status_card.json', 'r', encoding='utf-8') as f:
-                    flex_template_str = f.read()
-
-                # 2. 必要なデータを計算
+                # データを計算
                 start_date = datetime.datetime.strptime(found_plant['start_date'], '%Y-%m-%d').date()
                 today = datetime.date.today()
                 days_passed = (today - start_date).days + 1
@@ -95,25 +112,37 @@ def handle_message(event):
                         next_event_advice = f"次のイベントは「{ev['advice']}」(目安: {ev['gdd']}℃・日)"
                         break
 
-                # 3. 文字列置換で、プレースホルダーを実際のデータに書き換える
-                flex_template_str = flex_template_str.replace('__IMAGE_URL__', plant_info_from_db.get('image_url', ''))
-                flex_template_str = flex_template_str.replace('__PLANT_NAME__', plant_name)
-                flex_template_str = flex_template_str.replace('__DAYS_PASSED__', str(days_passed))
-                flex_template_str = flex_template_str.replace('__GDD__', f"{gdd:.1f}")
-                flex_template_str = flex_template_str.replace('__NEXT_EVENT_ADVICE__', next_event_advice)
-                flex_template_str = flex_template_str.replace('__PLANT_ID__', str(found_plant['id']))
+                # FlexMessageをプログラム的に組み立てる
+                bubble = FlexBubble(
+                    hero=FlexImage(url=plant_info_from_db.get('image_url'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
+                    body=FlexBox(
+                        layout='vertical',
+                        contents=[
+                            FlexText(text=f"{plant_name}の栽培状況", weight='bold', size='xl'),
+                            FlexBox(
+                                layout='vertical', margin='lg', spacing='sm',
+                                contents=[
+                                    FlexBox(layout='baseline', spacing='sm', contents=[
+                                            FlexText(text='栽培日数', color='#aaaaaa', size='sm', flex=2),
+                                            FlexText(text=f"{days_passed}日目", wrap=True, color='#666666', size='sm', flex=5) ]),
+                                    FlexBox(layout='baseline', spacing='sm', contents=[
+                                            FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=2),
+                                            FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5) ])]),
+                            FlexBox(layout='vertical', margin='lg', contents=[
+                                    FlexText(text='次のイベント', size='md', weight='bold'),
+                                    FlexText(text=next_event_advice, wrap=True, margin='md') ])]),
+                    footer=FlexBox(
+                        layout='vertical', spacing='sm',
+                        contents=[
+                            FlexButton(style='link', height='sm', action=PostbackAction(label="💧 水やりを記録する", data=f"action=log_watering&plant_id={found_plant['id']}")),
+                            FlexButton(style='link', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={found_plant['id']}"))]))
                 
-                # 4. 完成した文字列を、JSON（辞書）に変換する
-                flex_contents = json.loads(flex_template_str)
-
-                # 5. FlexMessageオブジェクトを作成
-                reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=flex_contents)
+                reply_message_obj = FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble)
         else:
             reply_message_obj = TextMessage(text=f"「{plant_name_to_check}」は登録されていません。")
-    # (他のelifやelseのロジックは省略。お前のコードのままでOK)
+    # 他のコマンドの処理は省略...
     else:
-        # ...
-        pass
+         reply_message_obj = TextMessage(text="「〇〇を追加」で登録、「〇〇の状態」で確認できます。")
 
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
