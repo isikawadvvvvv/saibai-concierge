@@ -18,7 +18,9 @@ from linebot.v3.messaging import (
     FlexMessage,
     ApiException
 )
+# 全てのFlexMessage関連の部品を、実在が確認されたこの場所からインポートする
 from linebot.v3.messaging.models import (
+    FlexContainer,
     BubbleContainer,
     BoxComponent,
     TextComponent,
@@ -94,7 +96,6 @@ def handle_message(event):
     user_message = event.message.text
     reply_message_obj = None
 
-    # ユーザーがDBに存在するか確認、存在しなければ新規登録
     user_response = supabase.table('users').select('id').eq('id', user_id).execute()
     if not user_response.data:
         supabase.table('users').insert({'id': user_id}).execute()
@@ -102,7 +103,6 @@ def handle_message(event):
 僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
 まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
 （例：ミニトマトを追加）""")
-    
     elif 'を追加' in user_message:
         plant_name = user_message.replace('を追加', '').strip()
         if plant_name and plant_name in PLANT_DATABASE:
@@ -113,7 +113,7 @@ def handle_message(event):
             reply_message_obj = TextMessage(text=f"申し訳ありません、「{plant_name}」の栽培データはまだありません。")
         else:
             reply_message_obj = TextMessage(text="作物名を指定してください。（例：ミニトマトを追加）")
-
+            
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
@@ -138,7 +138,7 @@ def handle_message(event):
                         if 'product_name' in ev and ev.get('affiliate_link'):
                             recommendation_text = f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                         break
-                
+
                 bubble = BubbleContainer(
                     hero=ImageComponent(url=plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
                     body=BoxComponent(
