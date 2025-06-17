@@ -17,16 +17,21 @@ from linebot.v3.messaging import (
     TextMessage,
     FlexMessage,
     ApiException,
-    # FlexMessage関連のコンポーネントをこちらにまとめます
-    BubbleContainer,
+    # ↓↓↓ BubbleContainer はこちらからインポートします ↓↓↓
+    BubbleContainer
+)
+# ↓↓↓ FlexMessageの各コンポーネントはこちらの「models」からインポートします ↓↓↓
+from linebot.v3.messaging.models import (
     BoxComponent,
     TextComponent,
     ImageComponent,
     ButtonComponent,
     SeparatorComponent,
-    PostbackAction
+    PostbackAction,
+    FlexContainer
 )
 from supabase import create_client, Client
+
 
 # --- 初期設定 ---
 app = Flask(__name__)
