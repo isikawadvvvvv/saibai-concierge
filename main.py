@@ -8,8 +8,9 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+
 # ----------------------------------------------------------------
-# Messaging APIの基本的な機能や、メッセージの大きな枠組みはこちらから
+# LINE Messaging API関連のインポートを整理しました
 # ----------------------------------------------------------------
 from linebot.v3.messaging import (
     Configuration,
@@ -19,20 +20,15 @@ from linebot.v3.messaging import (
     TextMessage,
     FlexMessage,
     ApiException,
-    FlexBubble,
+    FlexBubble,   # Bubbleコンテナはこちらから
     PostbackAction
 )
-
-# ----------------------------------------------------------------
-# Flex Messageの「部品（コンポーネント）」はこちらの .models から
-# 全ての名前を Flex*** に修正しました！
-# ----------------------------------------------------------------
 from linebot.v3.messaging.models import (
-    FlexBox,
+    FlexBox,      # BoxやTextなどの「部品」はこちらから
     FlexText,
     FlexImage,
     FlexButton,
-    FlexSeparator
+    FlexSeparator # 未使用でしたが、区切り線を使いたい場合のために追加しました
 )
 from supabase import create_client, Client
 
@@ -44,7 +40,8 @@ supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# 植物データベース
+# --- 植物データベース ---
+# ここに新しい野菜のデータを追加していくことで、対応できる作物を増やせます
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0,
@@ -62,13 +59,20 @@ PLANT_DATABASE = {
             {'gdd': 500, 'advice': '収穫が始まりました！'}
         ]
     },
-
     'なす': {
         'base_temp': 12.0,
         'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg',
         'events': [
             {'gdd': 350, 'advice': '最初の追肥のタイミングです。株の周りに円を描くように肥料を与えましょう。'},
             {'gdd': 800, 'advice': '最初の実がなり始めました！ここからは肥料切れに注意し、2週間に1回のペースで追肥を続けるのがおすすめです。'}
+        ]
+    },
+    'ピーマン': {
+        'base_temp': 15.0,
+        'image_url': 'https://www.shuminoengei.jp/images/concierge/qa_plant_image/352_001.jpg',
+        'events': [
+            {'gdd': 400, 'advice': '一番花が咲いたら追肥のサインです！'},
+            {'gdd': 900, 'advice': '実がなり始めました。乾燥に注意し、水やりを欠かさないようにしましょう。', 'product_name': '野菜用の液体肥料', 'affiliate_link': 'https://amzn.to/3Rj7sC9'}
         ]
     }
 }
@@ -131,7 +135,7 @@ def handle_message(event):
     elif 'の状態' in user_message:
         plant_name_to_check = user_message.replace('の状態', '').strip()
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
-        
+
         if plant_response.data:
             found_plant = plant_response.data[0]
             plant_name = found_plant['plant_name']
@@ -152,8 +156,19 @@ def handle_message(event):
                         if 'product_name' in ev and ev.get('affiliate_link'):
                             recommendation_text = f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                         break
+                
+                # ★★★ エラー修正箇所 ★★★
+                # アドバイス部分のコンテンツを動的に作成するためのリストを準備
+                advice_contents = [
+                    FlexText(text='次のイベント', size='md', weight='bold'),
+                    FlexText(text=next_event_advice, wrap=True, margin='md')
+                ]
+                # おすすめ情報(recommendation_text)が空でない場合のみ、ヒントの部品をリストに追加
+                if recommendation_text:
+                    advice_contents.append(
+                        FlexText(text=recommendation_text, wrap=True, margin='sm', size='sm')
+                    )
 
-                # ↓↓↓ ここもすべて Flex*** に修正しました！
                 bubble = FlexBubble(
                     hero=FlexImage(url=plant_info_from_db.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
                     body=FlexBox(
@@ -169,10 +184,9 @@ def handle_message(event):
                                     FlexBox(layout='baseline', spacing='sm', contents=[
                                             FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=2),
                                             FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5) ])]),
-                            FlexBox(layout='vertical', margin='lg', contents=[
-                                    FlexText(text='次のイベント', size='md', weight='bold'),
-                                    FlexText(text=next_event_advice, wrap=True, margin='md'),
-                                    FlexText(text=recommendation_text, wrap=True, margin='sm', size='sm') ])]),
+                            # 準備したリストを使ってFlexBoxを作成
+                            FlexBox(layout='vertical', margin='lg', contents=advice_contents)
+                        ]),
                     footer=FlexBox(
                         layout='vertical', spacing='sm',
                         contents=[
@@ -196,7 +210,12 @@ def handle_message(event):
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
             line_bot_api = MessagingApi(api_client)
-            line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
+            try:
+                line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
+            except ApiException as e:
+                print(f"API Error: {e.status_code}")
+                print(e.body)
+
 
 @line_handler.add(PostbackEvent)
 def handle_postback(event):
@@ -220,4 +239,6 @@ def handle_postback(event):
         line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply_text)]))
 
 if __name__ == "__main__":
-    app.run(port=5001)
+    # Renderなどのホスティングサービスでは、環境変数PORTが使われることが多いです
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port)
