@@ -61,6 +61,15 @@ PLANT_DATABASE = {
             {'gdd': 250, 'advice': '最初の追肥のタイミングです。'},
             {'gdd': 500, 'advice': '収穫が始まりました！'}
         ]
+    },
+
+    'なす': {
+        'base_temp': 12.0,
+        'image_url': 'https://images.pexels.com/photos/1349156/pexels-photo-1349156.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        'events': [
+            {'gdd': 350, 'advice': '最初の追肥のタイミングです。株の周りに円を描くように肥料を与えましょう。'},
+            {'gdd': 800, 'advice': '最初の実がなり始めました！ここからは肥料切れに注意し、2週間に1回のペースで追肥を続けるのがおすすめです。'}
+        ]
     }
 }
 
