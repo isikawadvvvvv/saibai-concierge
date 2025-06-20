@@ -65,7 +65,7 @@ PLANT_DATABASE = {
 
     'なす': {
         'base_temp': 12.0,
-        'image_url': 'https://images.pexels.com/photos/1349156/pexels-photo-1349156.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg',
         'events': [
             {'gdd': 350, 'advice': '最初の追肥のタイミングです。株の周りに円を描くように肥料を与えましょう。'},
             {'gdd': 800, 'advice': '最初の実がなり始めました！ここからは肥料切れに注意し、2週間に1回のペースで追肥を続けるのがおすすめです。'}
