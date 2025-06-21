@@ -45,7 +45,7 @@ supabase: Client = create_client(supabase_url, supabase_key)
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0,
-        'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg',
+        'image_url': 'https://images.pexels.com/photos/7208483/pexels-photo-7208483.jpeg',
         'events': [
             {'gdd': 300, 'advice': '最初の追肥のタイミングです！', 'product_name': 'トマトの追肥用肥料', 'affiliate_link': 'https://amzn.to/40aoawy'},
             {'gdd': 900, 'advice': '収穫の時期が近づいています！'}
@@ -53,7 +53,7 @@ PLANT_DATABASE = {
     },
     'きゅうり': {
         'base_temp': 12.0,
-        'image_url': 'https://www.shuminoengei.jp/images/concierge/qa_plant_image/296_001.jpg',
+        'image_url': 'https://images.pexels.com/photos/7543157/pexels-photo-7543157.jpeg',
         'events': [
             {'gdd': 250, 'advice': '最初の追肥のタイミングです。'},
             {'gdd': 500, 'advice': '収穫が始まりました！'}
@@ -61,7 +61,7 @@ PLANT_DATABASE = {
     },
     'なす': {
         'base_temp': 12.0,
-        'image_url': 'https://www.ja-town.com/shop/g/g3501-0000021-001/img/g3501-0000021-001_2.jpg',
+        'image_url': 'https://images.unsplash.com/photo-1639428134238-b548770d4b77?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
         'events': [
             {'gdd': 350, 'advice': '最初の追肥のタイミングです。株の周りに円を描くように肥料を与えましょう。'},
             {'gdd': 800, 'advice': '最初の実がなり始めました！ここからは肥料切れに注意し、2週間に1回のペースで追肥を続けるのがおすすめです。'}
@@ -69,7 +69,7 @@ PLANT_DATABASE = {
     },
     'ピーマン': {
         'base_temp': 15.0,
-        'image_url': 'https://www.shuminoengei.jp/images/concierge/qa_plant_image/352_001.jpg',
+        'image_url': 'https://images.pexels.com/photos/4943441/pexels-photo-4943441.jpeg',
         'events': [
             {'gdd': 400, 'advice': '一番花が咲いたら追肥のサインです！'},
             {'gdd': 900, 'advice': '実がなり始めました。乾燥に注意し、水やりを欠かさないようにしましょう。', 'product_name': '野菜用の液体肥料', 'affiliate_link': 'https://amzn.to/3Rj7sC9'}
