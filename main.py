@@ -22,9 +22,9 @@ from linebot.v3.messaging import (
     ApiException,
     FlexBubble,
     PostbackAction,
-    # ★★★ クイックリプライ用の部品を追加 ★★★
+    # ★★★ ここを修正しました！ ★★★
     QuickReply,
-    QuickReplyButton,
+    QuickReplyItem, # QuickReplyButton -> QuickReplyItem
     MessageAction
 )
 from linebot.v3.messaging.models import (
@@ -45,7 +45,6 @@ supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 # --- 植物データベース ---
-# ここに新しい野菜のデータを追加していくことで、対応できる作物を増やせます
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0,
@@ -126,16 +125,15 @@ def handle_message(event):
 まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
 （例：ミニトマトを追加）""")
     
-    # ★★★ ここから新機能のロジック ★★★
     elif user_message in ["追加", "登録", "作物を追加"]:
-        # PLANT_DATABASEから作物名のリストを取得して、クイックリプライボタンを作成
         items = []
         for plant_name in PLANT_DATABASE.keys():
             items.append(
-                QuickReplyButton(
+                # ★★★ ここも修正しました！ ★★★
+                QuickReplyItem( # QuickReplyButton -> QuickReplyItem
                     action=MessageAction(
                         label=plant_name,
-                        text=f"{plant_name}を追加" # ボタンをタップすると「〇〇を追加」というテキストが送信される
+                        text=f"{plant_name}を追加"
                     )
                 )
             )
@@ -144,7 +142,6 @@ def handle_message(event):
             text="どの作物を登録しますか？",
             quick_reply=QuickReply(items=items)
         )
-    # ★★★ ここまで新機能 ★★★
 
     elif 'を追加' in user_message:
         plant_name = user_message.replace('を追加', '').strip()
@@ -260,6 +257,5 @@ def handle_postback(event):
         line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply_text)]))
 
 if __name__ == "__main__":
-    # Renderなどのホスティングサービスでは、環境変数PORTが使われることが多いです
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port)
