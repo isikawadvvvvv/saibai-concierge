@@ -10,7 +10,7 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
 
 # ----------------------------------------------------------------
-# LINE Messaging API関連のインポートを整理しました
+# LINE Messaging API関連のインポート
 # ----------------------------------------------------------------
 from linebot.v3.messaging import (
     Configuration,
@@ -20,15 +20,19 @@ from linebot.v3.messaging import (
     TextMessage,
     FlexMessage,
     ApiException,
-    FlexBubble,   # Bubbleコンテナはこちらから
-    PostbackAction
+    FlexBubble,
+    PostbackAction,
+    # ★★★ クイックリプライ用の部品を追加 ★★★
+    QuickReply,
+    QuickReplyButton,
+    MessageAction
 )
 from linebot.v3.messaging.models import (
-    FlexBox,      # BoxやTextなどの「部品」はこちらから
+    FlexBox,
     FlexText,
     FlexImage,
     FlexButton,
-    FlexSeparator # 未使用でしたが、区切り線を使いたい場合のために追加しました
+    FlexSeparator
 )
 from supabase import create_client, Client
 
@@ -121,6 +125,27 @@ def handle_message(event):
 僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
 まずは、育てたい作物の名前の後に「を追加」と付けて送ってください。
 （例：ミニトマトを追加）""")
+    
+    # ★★★ ここから新機能のロジック ★★★
+    elif user_message in ["追加", "登録", "作物を追加"]:
+        # PLANT_DATABASEから作物名のリストを取得して、クイックリプライボタンを作成
+        items = []
+        for plant_name in PLANT_DATABASE.keys():
+            items.append(
+                QuickReplyButton(
+                    action=MessageAction(
+                        label=plant_name,
+                        text=f"{plant_name}を追加" # ボタンをタップすると「〇〇を追加」というテキストが送信される
+                    )
+                )
+            )
+        
+        reply_message_obj = TextMessage(
+            text="どの作物を登録しますか？",
+            quick_reply=QuickReply(items=items)
+        )
+    # ★★★ ここまで新機能 ★★★
+
     elif 'を追加' in user_message:
         plant_name = user_message.replace('を追加', '').strip()
         if plant_name and plant_name in PLANT_DATABASE:
@@ -157,13 +182,10 @@ def handle_message(event):
                             recommendation_text = f"\n\n💡ヒント：\n「{ev['product_name']}」がおすすめです。\n詳細はこちら：\n{ev['affiliate_link']}"
                         break
                 
-                # ★★★ エラー修正箇所 ★★★
-                # アドバイス部分のコンテンツを動的に作成するためのリストを準備
                 advice_contents = [
                     FlexText(text='次のイベント', size='md', weight='bold'),
                     FlexText(text=next_event_advice, wrap=True, margin='md')
                 ]
-                # おすすめ情報(recommendation_text)が空でない場合のみ、ヒントの部品をリストに追加
                 if recommendation_text:
                     advice_contents.append(
                         FlexText(text=recommendation_text, wrap=True, margin='sm', size='sm')
@@ -184,7 +206,6 @@ def handle_message(event):
                                     FlexBox(layout='baseline', spacing='sm', contents=[
                                             FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=2),
                                             FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5) ])]),
-                            # 準備したリストを使ってFlexBoxを作成
                             FlexBox(layout='vertical', margin='lg', contents=advice_contents)
                         ]),
                     footer=FlexBox(
@@ -199,8 +220,8 @@ def handle_message(event):
             
     elif 'ヘルプ' in user_message.lower():
         reply_message_obj = TextMessage(text="""【使い方ガイド】
-🌱作物の登録：「〇〇を追加」
-（例：ミニトマトを追加）
+🌱作物の登録：「追加」と送信してください
+（ボタンが表示されます）
 
 📈状態の確認：「〇〇の状態」
 （例：ミニトマトの状態）""")
