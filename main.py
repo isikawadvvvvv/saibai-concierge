@@ -8,11 +8,12 @@ import json
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, LocationMessageContent
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
     TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
-    PostbackAction, MessageAction, QuickReply, QuickReplyItem
+    PostbackAction, MessageAction, QuickReply, QuickReplyItem,
+    LocationAction
 )
 from linebot.v3.messaging.models import (
     FlexBox, FlexText, FlexImage, FlexButton, FlexSeparator, FlexSpan
@@ -28,7 +29,6 @@ supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 # --- Ver.2.0 植物データベース ---
-# (この部分は変更ありません)
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0, 'image_url': 'https://images.pexels.com/photos/7208483/pexels-photo-7208483.jpeg', 'avg_gdd_per_day': 15,
@@ -58,9 +58,10 @@ PLANT_DATABASE = {
 
 
 # --- ヘルパー関数 ---
-# (get_weather_data, calculate_gdd は変更ありません)
-def get_weather_data(start_date, end_date):
-    url = f"https://api.open-meteo.com/v1/forecast?latitude=35.66&longitude=139.65&daily=temperature_2m_max,temperature_2m_min&start_date={start_date}&end_date={end_date}&timezone=Asia%2FTokyo"
+def get_weather_data(latitude=35.66, longitude=139.65, start_date=None, end_date=None):
+    s_date = start_date.strftime('%Y-%m-%d')
+    e_date = end_date.strftime('%Y-%m-%d')
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min&start_date={s_date}&end_date={e_date}&timezone=Asia%2FTokyo"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -79,20 +80,27 @@ def calculate_gdd(weather_data, base_temp=10.0):
     return gdd
 
 # --- 状態表示カードを作成する関数 ---
-def create_status_flex_message(plant_id, plant_name, start_date_str):
-    # (この関数の中身は変更ありません)
+def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
     plant_info = PLANT_DATABASE.get(plant_name)
-    if not plant_info: return TextMessage(text=f"「{plant_name}」の情報が見つかりません。")
+    if not plant_info:
+        return TextMessage(text=f"「{plant_name}」の情報が見つかりません。")
+
+    user = supabase.table('users').select('latitude, longitude').eq('id', user_id).single().execute().data
+    lat = user.get('latitude') or 35.66
+    lon = user.get('longitude') or 139.65
+
     start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
     today = datetime.date.today()
-    weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
+    weather_data = get_weather_data(latitude=lat, longitude=lon, start_date=start_date, end_date=today)
     gdd = calculate_gdd(weather_data, plant_info['base_temp']) if weather_data else 0
+
     next_event = None
     for ev in plant_info.get('events', []):
         if gdd < ev['gdd']:
             next_event = ev
             break
-    progress_contents, advice_contents, recommendation_contents = [], [], []
+
+    progress_contents = []
     if next_event:
         progress = (gdd / next_event['gdd']) * 100
         gdd_remaining = next_event['gdd'] - gdd
@@ -105,20 +113,27 @@ def create_status_flex_message(plant_id, plant_name, start_date_str):
             FlexText(text=f"予測: あと約{max(0, days_to_event):.0f}日 ({next_event['gdd']} GDD)", size='xs', color='#AAAAAA', margin='sm', align='end')
         ])
         progress_contents.append(progress_bar)
-    advice_title, advice_text = ("栽培完了！", "お疲れ様でした！収穫を楽しんでくださいね。")
+    
+    advice_contents = []
+    advice_title = "栽培完了！"
+    advice_text = "お疲れ様でした！収穫を楽しんでくださいね。"
     if next_event:
         advice_title = next_event['advice']
         advice_text = ""
         if next_event.get('what'): advice_text += f"【何を】\n{next_event['what']}\n\n"
         if next_event.get('how'): advice_text += f"【どうやって】\n{next_event['how']}"
+    
     advice_contents.append(FlexText(text=advice_title, weight='bold', wrap=True, margin='lg', size='lg'))
     if advice_text: advice_contents.append(FlexText(text=advice_text, wrap=True, margin='md', size='sm', color='#333333'))
+    
+    recommendation_contents = []
     if next_event and next_event.get('product_name'):
         recommendation_contents.extend([
             FlexSeparator(margin='lg'), FlexText(text="💡ヒント", weight='bold', margin='lg'),
             FlexText(text=next_event.get('recommendation_reason', ''), size='sm', wrap=True, margin='md'),
             FlexButton(style='link', height='sm', action=MessageAction(label=f"おすすめ商品: {next_event['product_name']}", text=f"おすすめ商品「{next_event['product_name']}」のリンクはこちらです！\n{next_event['affiliate_link']}"))
         ])
+
     bubble = FlexBubble(
         hero=FlexImage(url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
         body=FlexBox(layout='vertical', contents=[
@@ -154,10 +169,11 @@ def handle_message(event):
     user_response = supabase.table('users').select('id').eq('id', user_id).execute()
     if not user_response.data:
         supabase.table('users').insert({'id': user_id}).execute()
-        reply_message_obj = TextMessage(text="""はじめまして！\n僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。\nまずは「追加」と送って、育てる作物を登録しましょう！""")
+        reply_message_obj = TextMessage(text="""はじめまして！
+僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
+まずは「追加」と送って、育てる作物を登録しましょう！""")
     
-    elif user_message == "一覧":
-        # ★★★ 修正②: 表示する植物を12個に制限 ★★★
+    if user_message == "一覧":
         plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=False).limit(12).execute().data
         if not plants:
             reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
@@ -180,6 +196,12 @@ def handle_message(event):
                 bubbles.append(bubble)
             reply_message_obj = FlexMessage(alt_text='登録植物一覧', contents=FlexCarousel(contents=bubbles))
 
+    elif user_message == "場所設定":
+        reply_message_obj = TextMessage(
+            text="あなたの栽培エリアの天気をより正確に予測するため、位置情報を教えてください。\n（チャット画面下部の「+」から位置情報を送信してください）",
+            quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
+        )
+
     elif user_message in ["追加", "登録", "作物を追加"]:
         items = []
         for plant_name in PLANT_DATABASE.keys():
@@ -200,7 +222,7 @@ def handle_message(event):
         plant_response = supabase.table('user_plants').select('*').eq('user_id', user_id).eq('plant_name', plant_name_to_check).order('id', desc=True).limit(1).execute()
         if plant_response.data:
             plant = plant_response.data[0]
-            reply_message_obj = create_status_flex_message(plant['id'], plant['plant_name'], plant['start_date'])
+            reply_message_obj = create_status_flex_message(user_id, plant['id'], plant['plant_name'], plant['start_date'])
         else:
             reply_message_obj = TextMessage(text=f"「{plant_name_to_check}」は登録されていません。「一覧」で確認してください。")
             
@@ -210,7 +232,10 @@ def handle_message(event):
 （ボタンでカンタン登録！）
 
 📈植物の管理：「一覧」と送信
-（状態確認、履歴、削除ができます）""")
+（状態確認、履歴、削除ができます）
+
+📍場所の登録：「場所設定」と送信
+（天気予報の精度が上がります）""")
     else:
         reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
 
@@ -220,12 +245,24 @@ def handle_message(event):
             try:
                 line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
             except ApiException as e:
-                # ★★★ 修正①: e.status_code -> e.status に修正 ★★★
                 print(f"API Error: status={e.status}, body={e.body}")
+
+@handler.add(MessageEvent, message=LocationMessageContent)
+def handle_location_message(event):
+    user_id = event.source.user_id
+    lat = event.message.latitude
+    lon = event.message.longitude
+    
+    supabase.table('users').update({'latitude': lat, 'longitude': lon}).eq('id', user_id).execute()
+    
+    reply_message_obj = TextMessage(text="位置情報を登録しました！これからはあなたの場所に合わせて、より正確な予測をお届けします。")
+    
+    with ApiClient(line_config) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
-    # (この関数の中身は変更ありません)
     user_id = event.source.user_id
     data = dict(p.split('=') for p in event.postback.data.split('&'))
     action = data.get('action')
@@ -238,7 +275,7 @@ def handle_postback(event):
             plant_id = int(data.get('plant_id'))
             plant = supabase.table('user_plants').select('*').eq('id', plant_id).single().execute().data
             if plant:
-                reply_message_obj = create_status_flex_message(plant['id'], plant['plant_name'], plant['start_date'])
+                reply_message_obj = create_status_flex_message(user_id, plant['id'], plant['plant_name'], plant['start_date'])
         
         elif action == 'show_log':
             plant_id = int(data.get('plant_id'))
@@ -281,7 +318,7 @@ def handle_postback(event):
         
         elif 'log_' in action:
             plant_id = int(data.get('plant_id'))
-            action_log = {'user_plant_id': plant_id, 'action_type': action}
+            action_log = {'user_plant_id': int(plant_id), 'action_type': action}
             supabase.table('plant_actions').insert(action_log).execute()
             reply_text = '💧水やりを記録しました！' if action == 'log_watering' else '🌱追肥を記録しました！'
             reply_message_obj = TextMessage(text=reply_text)
