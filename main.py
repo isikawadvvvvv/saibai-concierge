@@ -32,7 +32,7 @@ PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0,
         'image_url': 'https://images.pexels.com/photos/7208483/pexels-photo-7208483.jpeg',
-        'avg_gdd_per_day': 15, # 1日あたりの平均的な積算温度（予測に利用）
+        'avg_gdd_per_day': 15,
         'events': [
             {'gdd': 300, 'advice': '最初の追肥のタイミングです！',
              'what': 'N-P-Kが8-8-8などのバランスが良い化成肥料',
@@ -92,7 +92,6 @@ PLANT_DATABASE = {
 
 # --- ヘルパー関数 ---
 def get_weather_data(start_date, end_date):
-    # 東京(世田谷)の固定座標。将来的にはユーザー設定に対応させたい。
     url = f"https://api.open-meteo.com/v1/forecast?latitude=35.66&longitude=139.65&daily=temperature_2m_max,temperature_2m_min&start_date={start_date}&end_date={end_date}&timezone=Asia%2FTokyo"
     try:
         response = requests.get(url)
@@ -166,7 +165,6 @@ def handle_message(event):
                 weather_data = get_weather_data(start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
                 gdd = calculate_gdd(weather_data, plant_info['base_temp']) if weather_data else 0
 
-                # --- 次のイベント情報と予測を計算 ---
                 next_event = None
                 for ev in plant_info.get('events', []):
                     if gdd < ev['gdd']:
@@ -182,13 +180,13 @@ def handle_message(event):
                     progress_bar = FlexBox(layout='vertical', margin='md', contents=[
                         FlexText(text=f"次のイベントまで {progress:.0f}%", size='sm', color='#555555'),
                         FlexBox(layout='vertical', margin='sm', background_color='#E0E0E0', corner_radius='5px', height='10px', contents=[
-                            FlexBox(layout='vertical', background_color='#00B900', corner_radius='5px', height='100%', width=f'{min(progress, 100)}%')
+                            # ★★★ ここを修正しました！ ★★★
+                            FlexBox(layout='vertical', background_color='#00B900', corner_radius='5px', height='100%', width=f'{min(progress, 100)}%', contents=[])
                         ]),
                         FlexText(text=f"予測: あと約{days_to_event:.0f}日 ({next_event['gdd']} GDD)", size='xs', color='#AAAAAA', margin='sm', align='end')
                     ])
                     progress_contents.append(progress_bar)
                 
-                # --- アドバイス部分を作成 ---
                 advice_contents = []
                 advice_title = "栽培完了！"
                 advice_text = "お疲れ様でした！収穫を楽しんでくださいね。"
@@ -204,7 +202,6 @@ def handle_message(event):
                 if advice_text:
                     advice_contents.append(FlexText(text=advice_text, wrap=True, margin='md', size='sm', color='#333333'))
                 
-                # --- おすすめ商品部分を作成 ---
                 recommendation_contents = []
                 if next_event and next_event.get('product_name'):
                     recommendation_contents.extend([
@@ -218,7 +215,6 @@ def handle_message(event):
                         )
                     ])
 
-                # --- 全体を組み立ててFlexMessageを作成 ---
                 bubble = FlexBubble(
                     hero=FlexImage(url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
                     body=FlexBox(
