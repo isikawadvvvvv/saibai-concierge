@@ -6,11 +6,14 @@ import datetime
 import requests
 import json
 from flask import Flask, request, abort
+from apscheduler.schedulers.background import BackgroundScheduler # スケジューラ機能
+
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, LocationMessageContent
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
+    PushMessageRequest,
     TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
     LocationAction
@@ -94,58 +97,69 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
     weather_data = get_weather_data(latitude=lat, longitude=lon, start_date=start_date, end_date=today)
     gdd = calculate_gdd(weather_data, plant_info['base_temp']) if weather_data else 0
 
-    next_event = None
-    for ev in plant_info.get('events', []):
-        if gdd < ev['gdd']:
-            next_event = ev
-            break
-
+    next_event = next((ev for ev in plant_info.get('events', []) if gdd < ev['gdd']), None)
+    
+    header_contents = [FlexText(text=plant_name, weight='bold', size='xl', margin='md')]
+    basic_info_contents = [
+        FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='栽培日数', color='#aaaaaa', size='sm', flex=3), FlexText(text=f"{(today - start_date).days + 1}日目", wrap=True, color='#666666', size='sm', flex=5)]),
+        FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=3), FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5)])
+    ]
     progress_contents = []
     if next_event:
         progress = (gdd / next_event['gdd']) * 100
-        gdd_remaining = next_event['gdd'] - gdd
-        days_to_event = gdd_remaining / plant_info.get('avg_gdd_per_day', 15)
-        progress_bar = FlexBox(layout='vertical', margin='md', contents=[
-            FlexText(text=f"次のイベントまで {progress:.0f}%", size='sm', color='#555555'),
-            FlexBox(layout='vertical', margin='sm', background_color='#E0E0E0', corner_radius='5px', height='10px', contents=[
-                FlexBox(layout='vertical', background_color='#00B900', corner_radius='5px', height='100%', width=f'{min(progress, 100)}%', contents=[])
-            ]),
-            FlexText(text=f"予測: あと約{max(0, days_to_event):.0f}日 ({next_event['gdd']} GDD)", size='xs', color='#AAAAAA', margin='sm', align='end')
+        days_to_event = (next_event['gdd'] - gdd) / plant_info.get('avg_gdd_per_day', 15)
+        progress_contents.extend([
+            FlexSeparator(margin='xl'),
+            FlexText(text="次のイベントへの進捗", size='md', weight='bold', margin='lg'),
+            FlexBox(layout='vertical', margin='md', contents=[
+                FlexText(text=f"{progress:.0f}%", size='sm', color='#555555'),
+                FlexBox(layout='vertical', margin='sm', background_color='#E0E0E0', corner_radius='5px', height='10px', contents=[
+                    FlexBox(layout='vertical', background_color='#4CAF50', corner_radius='5px', height='100%', width=f'{min(progress, 100)}%', contents=[])
+                ]),
+                FlexText(text=f"予測: あと約{max(0, days_to_event):.0f}日 ({next_event['gdd']} GDD)", size='xs', color='#AAAAAA', margin='sm', align='end')
+            ])
         ])
-        progress_contents.append(progress_bar)
     
     advice_contents = []
     advice_title = "栽培完了！"
-    advice_text = "お疲れ様でした！収穫を楽しんでくださいね。"
+    advice_what = "お疲れ様でした！"
+    advice_how = "収穫を楽しんでくださいね。"
     if next_event:
         advice_title = next_event['advice']
-        advice_text = ""
-        if next_event.get('what'): advice_text += f"【何を】\n{next_event['what']}\n\n"
-        if next_event.get('how'): advice_text += f"【どうやって】\n{next_event['how']}"
-    
-    advice_contents.append(FlexText(text=advice_title, weight='bold', wrap=True, margin='lg', size='lg'))
-    if advice_text: advice_contents.append(FlexText(text=advice_text, wrap=True, margin='md', size='sm', color='#333333'))
+        advice_what = next_event.get('what', '---')
+        advice_how = next_event.get('how', '---')
+    advice_box = FlexBox(layout='vertical', margin='lg', spacing='md', contents=[
+        FlexText(text=advice_title, weight='bold', wrap=True, size='lg', color='#1E88E5'),
+        FlexBox(layout='vertical', margin='lg', spacing='sm', contents=[
+            FlexText(text="何を", weight='bold', size='sm', color='#555555'), FlexText(text=advice_what, wrap=True, size='sm'),
+            FlexSeparator(margin='md'),
+            FlexText(text="どうやって", weight='bold', size='sm', color='#555555', margin='sm'), FlexText(text=advice_how, wrap=True, size='sm'),
+        ])
+    ])
+    advice_contents.extend([FlexSeparator(margin='xl'), advice_box])
     
     recommendation_contents = []
     if next_event and next_event.get('product_name'):
         recommendation_contents.extend([
-            FlexSeparator(margin='lg'), FlexText(text="💡ヒント", weight='bold', margin='lg'),
-            FlexText(text=next_event.get('recommendation_reason', ''), size='sm', wrap=True, margin='md'),
-            FlexButton(style='link', height='sm', action=MessageAction(label=f"おすすめ商品: {next_event['product_name']}", text=f"おすすめ商品「{next_event['product_name']}」のリンクはこちらです！\n{next_event['affiliate_link']}"))
+            FlexSeparator(margin='lg'),
+            FlexBox(layout='vertical', margin='md', contents=[
+                FlexText(text="💡 おすすめアイテム", weight='bold', size='md', margin='sm'),
+                FlexText(text=next_event.get('recommendation_reason', ''), size='xs', wrap=True, margin='md', color='#666666'),
+                FlexButton(style='link', height='sm', action=MessageAction(label=f"商品を見る: {next_event['product_name']}", text=f"おすすめ商品「{next_event['product_name']}」のリンクはこちらです！\n{next_event['affiliate_link']}"), margin='sm', color='#1E88E5')
+            ])
         ])
 
     bubble = FlexBubble(
         hero=FlexImage(url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='20:13', aspect_mode='cover'),
-        body=FlexBox(layout='vertical', contents=[
-            FlexText(text=f"{plant_name}の栽培状況", weight='bold', size='xl'),
-            FlexBox(layout='vertical', margin='lg', spacing='sm', contents=[
-                FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='栽培日数', color='#aaaaaa', size='sm', flex=2), FlexText(text=f"{(today - start_date).days + 1}日目", wrap=True, color='#666666', size='sm', flex=5)]),
-                FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=2), FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5)])
-            ]), *progress_contents, *advice_contents, *recommendation_contents
+        body=FlexBox(layout='vertical', spacing='lg', contents=[
+            *header_contents,
+            FlexBox(layout='vertical', margin='lg', spacing='md', contents=basic_info_contents),
+            *progress_contents, *advice_contents, *recommendation_contents
         ]),
-        footer=FlexBox(layout='vertical', spacing='sm', contents=[
-            FlexButton(style='link', height='sm', action=PostbackAction(label="💧 水やりを記録する", data=f"action=log_watering&plant_id={plant_id}")),
-            FlexButton(style='link', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={plant_id}"))
+        footer=FlexBox(layout='vertical', spacing='md', contents=[
+            FlexSeparator(),
+            FlexButton(style='primary', height='sm', action=PostbackAction(label="💧 水やりを記録する", data=f"action=log_watering&plant_id={plant_id}"), color="#42a5f5"),
+            FlexButton(style='primary', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={plant_id}"), color="#66bb6a")
         ]))
     return FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble)
 
@@ -166,14 +180,14 @@ def handle_message(event):
     user_message = event.message.text
     reply_message_obj = None
 
-    user_response = supabase.table('users').select('id').eq('id', user_id).execute()
-    if not user_response.data:
+    user = supabase.table('users').select('id').eq('id', user_id).single().execute().data
+    if not user:
         supabase.table('users').insert({'id': user_id}).execute()
         reply_message_obj = TextMessage(text="""はじめまして！
 僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
 まずは「追加」と送って、育てる作物を登録しましょう！""")
     
-    if user_message == "一覧":
+    elif user_message == "一覧":
         plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=False).limit(12).execute().data
         if not plants:
             reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
@@ -252,11 +266,8 @@ def handle_location_message(event):
     user_id = event.source.user_id
     lat = event.message.latitude
     lon = event.message.longitude
-    
     supabase.table('users').update({'latitude': lat, 'longitude': lon}).eq('id', user_id).execute()
-    
     reply_message_obj = TextMessage(text="位置情報を登録しました！これからはあなたの場所に合わせて、より正確な予測をお届けします。")
-    
     with ApiClient(line_config) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
@@ -270,16 +281,13 @@ def handle_postback(event):
 
     with ApiClient(line_config) as api_client:
         line_bot_api = MessagingApi(api_client)
-
         if action == 'show_status':
             plant_id = int(data.get('plant_id'))
             plant = supabase.table('user_plants').select('*').eq('id', plant_id).single().execute().data
-            if plant:
-                reply_message_obj = create_status_flex_message(user_id, plant['id'], plant['plant_name'], plant['start_date'])
+            if plant: reply_message_obj = create_status_flex_message(user_id, plant['id'], plant['plant_name'], plant['start_date'])
         
         elif action == 'show_log':
-            plant_id = int(data.get('plant_id'))
-            plant_name = data.get('plant_name')
+            plant_id, plant_name = int(data.get('plant_id')), data.get('plant_name')
             actions = supabase.table('plant_actions').select('*').eq('user_plant_id', plant_id).order('created_at', desc=True).limit(5).execute().data
             if not actions:
                 reply_text = f"「{plant_name}」のお手入れ記録はまだありません。"
@@ -293,8 +301,7 @@ def handle_postback(event):
             reply_message_obj = TextMessage(text=reply_text)
             
         elif action == 'confirm_delete':
-            plant_id = data.get('plant_id')
-            plant_name = data.get('plant_name')
+            plant_id, plant_name = data.get('plant_id'), data.get('plant_name')
             bubble = FlexBubble(
                 body=FlexBox(layout='vertical', spacing='md', contents=[
                     FlexText(text=f"「{plant_name}」を本当に削除しますか？", wrap=True, weight='bold', size='md'),
@@ -303,8 +310,7 @@ def handle_postback(event):
                 footer=FlexBox(layout='horizontal', spacing='sm', contents=[
                     FlexButton(style='primary', color='#ff5555', action=PostbackAction(label='はい、削除します', data=f"action=delete&plant_id={plant_id}")),
                     FlexButton(style='secondary', action=PostbackAction(label='いいえ', data='action=cancel_delete'))
-                ])
-            )
+                ]))
             reply_message_obj = FlexMessage(alt_text='削除の確認', contents=bubble)
 
         elif action == 'delete':
@@ -318,7 +324,7 @@ def handle_postback(event):
         
         elif 'log_' in action:
             plant_id = int(data.get('plant_id'))
-            action_log = {'user_plant_id': int(plant_id), 'action_type': action}
+            action_log = {'user_plant_id': plant_id, 'action_type': action}
             supabase.table('plant_actions').insert(action_log).execute()
             reply_text = '💧水やりを記録しました！' if action == 'log_watering' else '🌱追肥を記録しました！'
             reply_message_obj = TextMessage(text=reply_text)
@@ -326,6 +332,48 @@ def handle_postback(event):
         if reply_message_obj:
             line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
 
+# --- プッシュ通知の心臓部 ---
+def check_and_send_notifications():
+    print("--- Running daily notification check ---")
+    with app.app_context():
+        try:
+            plants_to_check = supabase.table('user_plants').select('*, users(*)').execute().data
+            if not plants_to_check:
+                print("No plants to check."); return
+
+            for plant in plants_to_check:
+                user_id, user_info, plant_name, plant_info = plant['user_id'], plant['users'], plant['plant_name'], PLANT_DATABASE.get(plant['plant_name'])
+                if not plant_info or not user_info: continue
+
+                lat, lon = user_info.get('latitude', 35.66), user_info.get('longitude', 139.65)
+                start_date, today = datetime.datetime.strptime(plant['start_date'], '%Y-%m-%d').date(), datetime.date.today()
+                
+                weather_data = get_weather_data(latitude=lat, longitude=lon, start_date=start_date, end_date=today)
+                gdd = calculate_gdd(weather_data, plant_info['base_temp']) if weather_data else 0
+                notified_gdds = plant.get('notified_gdds') or []
+
+                for event_info in plant_info.get('events', []):
+                    event_gdd = event_info['gdd']
+                    if gdd >= event_gdd and event_gdd not in notified_gdds:
+                        print(f"Sending notification to {user_id} for {plant_name} at GDD {event_gdd}")
+                        advice = event_info['advice']
+                        message_text = f"【栽培コンシェルジュからのお知らせ】\n\n『{plant_name}』が新しい成長段階に到達しました！\n\n「{advice}」\n\n「一覧」から詳しい情報や、具体的な作業内容を確認してくださいね。"
+                        push_message = TextMessage(text=message_text, quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="植物一覧を見る", text="一覧"))]))
+
+                        with ApiClient(line_config) as api_client:
+                            MessagingApi(api_client).push_message(PushMessageRequest(to=user_id, messages=[push_message]))
+
+                        notified_gdds.append(event_gdd)
+                        supabase.table('user_plants').update({'notified_gdds': notified_gdds}).eq('id', plant['id']).execute()
+                        break
+        except Exception as e:
+            print(f"Error during notification check: {e}")
+
+# --- アプリケーション起動とスケジューラ設定 ---
 if __name__ == "__main__":
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(check_and_send_notifications, 'cron', hour=8, timezone='Asia/Tokyo')
+    scheduler.start()
+    
     port = int(os.environ.get("PORT", 5001))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
