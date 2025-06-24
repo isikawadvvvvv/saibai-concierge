@@ -6,14 +6,14 @@ import datetime
 import requests
 import json
 from flask import Flask, request, abort
-from apscheduler.schedulers.background import BackgroundScheduler # スケジューラ機能
+from apscheduler.schedulers.background import BackgroundScheduler # スケジューラー機能
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, LocationMessageContent
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
-    PushMessageRequest,
+    PushMessageRequest, # プッシュ通知のために、これを追加
     TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
     LocationAction
@@ -61,7 +61,7 @@ PLANT_DATABASE = {
 
 
 # --- ヘルパー関数 ---
-def get_weather_data(latitude=35.66, longitude=139.65, start_date=None, end_date=None):
+def get_weather_data(latitude, longitude, start_date, end_date):
     s_date = start_date.strftime('%Y-%m-%d')
     e_date = end_date.strftime('%Y-%m-%d')
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min&start_date={s_date}&end_date={e_date}&timezone=Asia%2FTokyo"
@@ -162,6 +162,55 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
             FlexButton(style='primary', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={plant_id}"), color="#66bb6a")
         ]))
     return FlexMessage(alt_text=f"{plant_name}の状態", contents=bubble)
+
+# --- プッシュ通知の心臓部 ---
+def check_and_send_notifications():
+    print(f"--- {datetime.datetime.now()}: Running daily notification check ---")
+    with app.app_context():
+        try:
+            plants_to_check_res = supabase.table('user_plants').select('*, users(latitude, longitude)').execute()
+            plants_to_check = plants_to_check_res.data
+            
+            if not plants_to_check:
+                print("通知対象の植物がありません。")
+                return
+
+            for plant in plants_to_check:
+                user_id, user_info, plant_name = plant.get('user_id'), plant.get('users'), plant.get('plant_name')
+                plant_info_db = PLANT_DATABASE.get(plant_name)
+                
+                if not plant_info_db or not user_info:
+                    continue
+
+                lat, lon = user_info.get('latitude', 35.66), user_info.get('longitude', 139.65)
+                start_date = datetime.datetime.strptime(plant['start_date'], '%Y-%m-%d').date()
+                today = datetime.date.today()
+                
+                weather_data = get_weather_data(lat, lon, start_date, today)
+                gdd = calculate_gdd(weather_data, plant_info_db['base_temp']) if weather_data else 0
+                
+                notified_gdds = plant.get('notified_gdds') or []
+
+                for event in plant_info_db.get('events', []):
+                    event_gdd = event['gdd']
+                    if gdd >= event_gdd and event_gdd not in notified_gdds:
+                        print(f"通知を送信します: User({user_id}), Plant({plant_name}), Event GDD({event_gdd})")
+                        advice = event['advice']
+                        message_text = f"【栽培コンシェルジュからのお知らせ】\n\n『{plant_name}』が新しい成長段階に到達しました！\n\n「{advice}」\n\n「一覧」から詳しい情報や、具体的な作業内容を確認してくださいね。"
+                        
+                        push_message = TextMessage(
+                            text=message_text,
+                            quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="育ち具合を見る", text="一覧"))])
+                        )
+
+                        with ApiClient(line_config) as api_client:
+                            MessagingApi(api_client).push_message(PushMessageRequest(to=user_id, messages=[push_message]))
+
+                        notified_gdds.append(event_gdd)
+                        supabase.table('user_plants').update({'notified_gdds': notified_gdds}).eq('id', plant['id']).execute()
+                        break
+        except Exception as e:
+            print(f"通知チェック中にエラーが発生: {e}")
 
 # --- LINE Botのメインロジック ---
 @app.route("/callback", methods=['POST'])
@@ -332,47 +381,10 @@ def handle_postback(event):
         if reply_message_obj:
             line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
 
-# --- プッシュ通知の心臓部 ---
-def check_and_send_notifications():
-    print("--- Running daily notification check ---")
-    with app.app_context():
-        try:
-            plants_to_check = supabase.table('user_plants').select('*, users(*)').execute().data
-            if not plants_to_check:
-                print("No plants to check."); return
-
-            for plant in plants_to_check:
-                user_id, user_info, plant_name, plant_info = plant['user_id'], plant['users'], plant['plant_name'], PLANT_DATABASE.get(plant['plant_name'])
-                if not plant_info or not user_info: continue
-
-                lat, lon = user_info.get('latitude', 35.66), user_info.get('longitude', 139.65)
-                start_date, today = datetime.datetime.strptime(plant['start_date'], '%Y-%m-%d').date(), datetime.date.today()
-                
-                weather_data = get_weather_data(latitude=lat, longitude=lon, start_date=start_date, end_date=today)
-                gdd = calculate_gdd(weather_data, plant_info['base_temp']) if weather_data else 0
-                notified_gdds = plant.get('notified_gdds') or []
-
-                for event_info in plant_info.get('events', []):
-                    event_gdd = event_info['gdd']
-                    if gdd >= event_gdd and event_gdd not in notified_gdds:
-                        print(f"Sending notification to {user_id} for {plant_name} at GDD {event_gdd}")
-                        advice = event_info['advice']
-                        message_text = f"【栽培コンシェルジュからのお知らせ】\n\n『{plant_name}』が新しい成長段階に到達しました！\n\n「{advice}」\n\n「一覧」から詳しい情報や、具体的な作業内容を確認してくださいね。"
-                        push_message = TextMessage(text=message_text, quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="植物一覧を見る", text="一覧"))]))
-
-                        with ApiClient(line_config) as api_client:
-                            MessagingApi(api_client).push_message(PushMessageRequest(to=user_id, messages=[push_message]))
-
-                        notified_gdds.append(event_gdd)
-                        supabase.table('user_plants').update({'notified_gdds': notified_gdds}).eq('id', plant['id']).execute()
-                        break
-        except Exception as e:
-            print(f"Error during notification check: {e}")
-
 # --- アプリケーション起動とスケジューラ設定 ---
 if __name__ == "__main__":
-    scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(check_and_send_notifications, 'cron', hour=8, timezone='Asia/Tokyo')
+    scheduler = BackgroundScheduler(daemon=True, timezone='Asia/Tokyo')
+    scheduler.add_job(check_and_send_notifications, 'cron', hour=8)
     scheduler.start()
     
     port = int(os.environ.get("PORT", 5001))
