@@ -16,7 +16,7 @@ from linebot.v3.messaging import (
     PushMessageRequest,
     TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
-    LocationAction, URIAction # ★★★ URIActionを追加 ★★★
+    LocationAction, URIAction
 )
 from linebot.v3.messaging.models import (
     FlexBox, FlexText, FlexImage, FlexButton, FlexSeparator, FlexSpan
@@ -149,9 +149,10 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
                 FlexButton(
                     style='link',
                     height='sm',
-                    action=URIAction(
-                        label=f"商品を見る: {next_event['product_name']}",
-                        uri=next_event['affiliate_link']
+                    action=PostbackAction(
+                        label=f"リンクをチャットに表示",
+                        data=f"action=show_product_link&product_name={next_event['product_name']}&link={next_event['affiliate_link']}",
+                        displayText=f"「{next_event['product_name']}」のリンクを教えて"
                     ),
                     margin='sm',
                     color='#1E88E5'
@@ -381,6 +382,13 @@ def handle_postback(event):
         elif action == 'cancel_delete':
             reply_message_obj = TextMessage(text="操作をキャンセルしました。")
         
+        # ★★★ ここに新しい処理を追加 ★★★
+        elif action == 'show_product_link':
+            product_name = data.get('product_name', '商品')
+            link = data.get('link', 'https://example.com')
+            reply_text = f"こちらがおすすめの「{product_name}」のリンクです。\n{link}"
+            reply_message_obj = TextMessage(text=reply_text)
+
         elif 'log_' in action:
             plant_id = int(data.get('plant_id'))
             action_log = {'user_plant_id': plant_id, 'action_type': action}
