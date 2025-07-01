@@ -13,10 +13,10 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, LocationMessageContent
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
-    PushMessageRequest, # プッシュ通知のために、これを追加
+    PushMessageRequest,
     TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
-    LocationAction
+    LocationAction, URIAction # ★★★ URIActionを追加 ★★★
 )
 from linebot.v3.messaging.models import (
     FlexBox, FlexText, FlexImage, FlexButton, FlexSeparator, FlexSpan
@@ -145,7 +145,17 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
             FlexBox(layout='vertical', margin='md', contents=[
                 FlexText(text="💡 おすすめアイテム", weight='bold', size='md', margin='sm'),
                 FlexText(text=next_event.get('recommendation_reason', ''), size='xs', wrap=True, margin='md', color='#666666'),
-                FlexButton(style='link', height='sm', action=MessageAction(label=f"商品を見る: {next_event['product_name']}", text=f"おすすめ商品「{next_event['product_name']}」のリンクはこちらです！\n{next_event['affiliate_link']}"), margin='sm', color='#1E88E5')
+                # ★★★ ここを修正 ★★★
+                FlexButton(
+                    style='link',
+                    height='sm',
+                    action=URIAction(
+                        label=f"商品を見る: {next_event['product_name']}",
+                        uri=next_event['affiliate_link']
+                    ),
+                    margin='sm',
+                    color='#1E88E5'
+                )
             ])
         ])
 
