@@ -31,11 +31,20 @@ supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# --- Ver.2.0 植物データベース ---
+# --- Ver.2.1 植物データベース ---
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0, 'image_url': 'https://images.pexels.com/photos/7208483/pexels-photo-7208483.jpeg', 'avg_gdd_per_day': 15,
-        'events': [{'gdd': 300, 'advice': '最初の追肥のタイミングです！', 'what': 'N-P-Kが8-8-8などのバランスが良い化成肥料', 'how': '一株あたり約10g（大さじ1杯程度）を、株元から少し離して円を描くように与えます。', 'product_name': 'トマトの追肥用肥料', 'affiliate_link': 'https://amzn.to/40aoawy', 'recommendation_reason': 'この時期は実をつけ始める大切な時期。バランスの取れた栄養が、甘くて美味しいトマトを育てる秘訣です。'}, {'gdd': 900, 'advice': '収穫まであと少し！', 'what': '水やり管理', 'how': '土の表面が乾いたら、朝のうちにたっぷりと与えましょう。実が赤くなり始めたら、少し乾燥気味にすると糖度が上がります。'}]
+        'events': [
+            {
+                'gdd': 300, 'advice': '最初の追肥のタイミングです！', 
+                # ★★★「何を」の内容を分かりやすく修正 ★★★
+                'what': '「野菜の肥料」と書かれた、栄養バランスの良いものがおすすめです。', 
+                'how': '一株あたり約10g（大さじ1杯程度）を、株元から少し離して円を描くように与えます。', 
+                'product_name': 'トマトの追肥用肥料', 'affiliate_link': 'https://amzn.to/40aoawy', 'recommendation_reason': 'この時期は実をつけ始める大切な時期。バランスの取れた栄養が、甘くて美味しいトマトを育てる秘訣です。'
+            },
+            {'gdd': 900, 'advice': '収穫まであと少し！', 'what': '水やり管理', 'how': '土の表面が乾いたら、朝のうちにたっぷりと与えましょう。実が赤くなり始めたら、少し乾燥気味にすると糖度が上がります。'}
+        ]
     },
     'きゅうり': {
         'base_temp': 12.0, 'image_url': 'https://images.pexels.com/photos/7543157/pexels-photo-7543157.jpeg', 'avg_gdd_per_day': 20,
@@ -128,12 +137,17 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
         advice_title = next_event['advice']
         advice_what = next_event.get('what', '---')
         advice_how = next_event.get('how', '---')
+    
     advice_box = FlexBox(layout='vertical', margin='lg', spacing='md', contents=[
         FlexText(text=advice_title, weight='bold', wrap=True, size='lg', color='#1E88E5'),
         FlexBox(layout='vertical', margin='lg', spacing='sm', contents=[
-            FlexText(text="何を", weight='bold', size='sm', color='#555555'), FlexText(text=advice_what, wrap=True, size='sm'),
+            # ★★★ ラベルを質問形式に変更 ★★★
+            FlexText(text="Q：どんな肥料がいいの？", weight='bold', size='sm', color='#555555'), 
+            FlexText(text=advice_what, wrap=True, size='sm'),
             FlexSeparator(margin='md'),
-            FlexText(text="どうやって", weight='bold', size='sm', color='#555555', margin='sm'), FlexText(text=advice_how, wrap=True, size='sm'),
+            # ★★★ ラベルを質問形式に変更 ★★★
+            FlexText(text="Q：どうやって撒くの？", weight='bold', size='sm', color='#555555', margin='sm'), 
+            FlexText(text=advice_how, wrap=True, size='sm'),
         ])
     ])
     advice_contents.extend([FlexSeparator(margin='xl'), advice_box])
@@ -143,16 +157,14 @@ def create_status_flex_message(user_id, plant_id, plant_name, start_date_str):
         recommendation_contents.extend([
             FlexSeparator(margin='lg'),
             FlexBox(layout='vertical', margin='md', contents=[
-                FlexText(text="💡 おすすめアイテム", weight='bold', size='md', margin='sm'),
                 FlexText(text=next_event.get('recommendation_reason', ''), size='xs', wrap=True, margin='md', color='#666666'),
-                # ★★★ ここを修正 ★★★
+                # ★★★ ボタンのテキストとアクションを修正 ★★★
                 FlexButton(
                     style='link',
                     height='sm',
                     action=PostbackAction(
-                        label=f"リンクをチャットに表示",
-                        data=f"action=show_product_link&product_name={next_event['product_name']}&link={next_event['affiliate_link']}",
-                        displayText=f"「{next_event['product_name']}」のリンクを教えて"
+                        label="おすすめの商品を見る",
+                        data=f"action=show_product_link&product_name={next_event['product_name']}&link={next_event['affiliate_link']}"
                     ),
                     margin='sm',
                     color='#1E88E5'
@@ -382,11 +394,11 @@ def handle_postback(event):
         elif action == 'cancel_delete':
             reply_message_obj = TextMessage(text="操作をキャンセルしました。")
         
-        # ★★★ ここに新しい処理を追加 ★★★
+        # ★★★ 新しいアクションを追加 ★★★
         elif action == 'show_product_link':
             product_name = data.get('product_name', '商品')
             link = data.get('link', 'https://example.com')
-            reply_text = f"こちらがおすすめの「{product_name}」のリンクです。\n{link}"
+            reply_text = f"こちらがおすすめの「{product_name}」のリンクです！\n{link}"
             reply_message_obj = TextMessage(text=reply_text)
 
         elif 'log_' in action:
