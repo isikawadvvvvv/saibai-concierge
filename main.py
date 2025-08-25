@@ -104,7 +104,6 @@ def check_and_send_notifications():
         except Exception as e:
             print(f"通知チェック中にエラーが発生: {e}")
 
-
 # --- LINE Botのメインロジック ---
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -148,7 +147,8 @@ def handle_message(event):
         items = [QuickReplyItem(action=MessageAction(label=p, text=p)) for p in PLANT_DATABASE.keys()]
         reply_message_obj = TextMessage(text="どの作物を登録しますか？", quick_reply=QuickReply(items=items))
     elif text == "一覧":
-        plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id').execute().data
+        # 【修正点】orderを 'id' の降順（新しい順）に変更
+        plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=True).execute().data
         if not plants:
             reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
         else:
@@ -169,7 +169,9 @@ def handle_message(event):
 📍場所の登録：「場所設定」と送信
 （天気予報の精度が上がります）""")
     else:
-        reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
+        # リッチメニューからのタップを想定し、不明なテキストには応答しないようにする
+        # reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
+        pass
 
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
