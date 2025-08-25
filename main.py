@@ -4,16 +4,23 @@
 import os
 import datetime
 import requests
+import json
 from dotenv import load_dotenv
 from flask import Flask, request, abort
 from apscheduler.schedulers.background import BackgroundScheduler
-
-# --- LINE SDK ---
 from linebot.v3 import WebhookHandler
-# ...(中略)... 同じimport文は省略 ...
-from linebot.v3.messaging import DatetimePickerAction, URIAction
-
-# --- 外部サービス ---
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, LocationMessageContent
+from linebot.v3.messaging import (
+    Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
+    PushMessageRequest,
+    TextMessage, FlexMessage, ApiException, FlexBubble, FlexCarousel,
+    PostbackAction, MessageAction, QuickReply, QuickReplyItem,
+    LocationAction, URIAction
+)
+from linebot.v3.messaging.models import (
+    FlexBox, FlexText, FlexImage, FlexButton, FlexSeparator, FlexSpan
+)
 from supabase import create_client, Client
 
 # --- 自作モジュール ---
@@ -26,111 +33,198 @@ from flex_messages import (
 # --- 初期設定 ---
 load_dotenv()
 app = Flask(__name__)
-# ...(中略)... LINEとSupabaseの初期設定は同じ ...
+line_config = Configuration(access_token=os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
+handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
+supabase_url: str = os.environ.get("SUPABASE_URL")
+supabase_key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
 
-# --- ヘルパー関数 (calculate_gdd, get_weather_data) ---
-# ...(中略)... 元のコードと同じ ...
+# --- ヘルパー関数 ---
+def get_weather_data(latitude, longitude, start_date, end_date):
+    s_date = start_date.strftime('%Y-%m-%d')
+    e_date = end_date.strftime('%Y-%m-%d')
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min&start_date={s_date}&end_date={e_date}&timezone=Asia%2FTokyo"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"APIリクエストエラー: {e}")
+        return None
 
-# --- スケジューラ: 通知機能 ---
+def calculate_gdd(weather_data, base_temp=10.0):
+    if not weather_data or 'daily' not in weather_data: return 0
+    gdd = 0
+    for max_t, min_t in zip(weather_data['daily']['temperature_2m_max'], weather_data['daily']['temperature_2m_min']):
+        if max_t is not None and min_t is not None:
+            avg_temp = (max_t + min_t) / 2
+            if avg_temp > base_temp: gdd += (avg_temp - base_temp)
+    return gdd
+
+# --- プッシュ通知の心臓部 ---
 def check_and_send_notifications():
-    print(f"--- {datetime.datetime.now()}: Running daily checks ---")
+    print(f"--- {datetime.datetime.now()}: Running daily notification check ---")
     with app.app_context():
         try:
-            # 1. GDDイベント通知 (元のロジック)
-            # ...(中略)...
+            plants_to_check_res = supabase.table('user_plants').select('*, users(latitude, longitude)').execute()
+            plants_to_check = plants_to_check_res.data
+            
+            if not plants_to_check:
+                print("通知対象の植物がありません。")
+                return
 
-            # 2. 【課題2】水やりリマインダー
-            yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
-            plants_res = supabase.table('user_plants').select('id, user_id, plant_name').execute()
-            for plant in plants_res.data:
-                action_res = supabase.table('plant_actions').select('id').eq('user_plant_id', plant['id']).eq('action_type', 'log_watering').gte('created_at', yesterday.isoformat()).execute()
-                if not action_res.data:
-                    # 過去24時間に水やり記録がない場合
-                    message = TextMessage(text=f"【水やりリマインダー💧】\n『{plant['plant_name']}』の水やりは記録しましたか？\nもし水やりをしたら、忘れずに記録してくださいね！")
+            for plant in plants_to_check:
+                user_id, user_info, plant_name = plant.get('user_id'), plant.get('users'), plant.get('plant_name')
+                plant_info_db = PLANT_DATABASE.get(plant_name)
+                
+                if not plant_info_db or not user_info:
+                    continue
+
+                lat, lon = user_info.get('latitude', 35.66), user_info.get('longitude', 139.65)
+                start_date = datetime.datetime.strptime(plant['start_date'], '%Y-%m-%d').date()
+                today = datetime.date.today()
+                
+                # 【課題2】水やりリマインダーの追加
+                yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+                watering_res = supabase.table('plant_actions').select('id').eq('user_plant_id', plant['id']).eq('action_type', 'log_watering').gte('created_at', yesterday.isoformat()).execute()
+                if not watering_res.data:
+                    message_text = f"【水やりリマインダー💧】\n『{plant['plant_name']}』の水やりは記録しましたか？\n忘れずに記録しましょう！"
+                    push_message = TextMessage(text=message_text, quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="一覧", text="一覧"))]))
                     with ApiClient(line_config) as api_client:
-                        MessagingApi(api_client).push_message(PushMessageRequest(to=plant['user_id'], messages=[message]))
+                        MessagingApi(api_client).push_message(PushMessageRequest(to=user_id, messages=[push_message]))
+                
+                weather_data = get_weather_data(lat, lon, start_date, today)
+                gdd = calculate_gdd(weather_data, plant_info_db['base_temp']) if weather_data else 0
+                
+                notified_gdds = plant.get('notified_gdds') or []
+
+                for event in plant_info_db.get('events', []):
+                    event_gdd = event['gdd']
+                    if gdd >= event_gdd and event_gdd not in notified_gdds:
+                        print(f"通知を送信します: User({user_id}), Plant({plant_name}), Event GDD({event_gdd})")
+                        advice = event['advice']
+                        message_text = f"【栽培コンシェルジュからのお知らせ】\n\n『{plant_name}』が新しい成長段階に到達しました！\n\n「{advice}」\n\n「一覧」から詳しい情報や、具体的な作業内容を確認してくださいね。"
+                        
+                        push_message = TextMessage(
+                            text=message_text,
+                            quick_reply=QuickReply(items=[QuickReplyItem(action=MessageAction(label="育ち具合を見る", text="一覧"))])
+                        )
+
+                        with ApiClient(line_config) as api_client:
+                            MessagingApi(api_client).push_message(PushMessageRequest(to=user_id, messages=[push_message]))
+
+                        notified_gdds.append(event_gdd)
+                        supabase.table('user_plants').update({'notified_gdds': notified_gdds}).eq('id', plant['id']).execute()
+                        break
         except Exception as e:
             print(f"通知チェック中にエラーが発生: {e}")
 
-
-# --- LINE Bot メインロジック ---
+# --- LINE Botのメインロジック ---
 @app.route("/callback", methods=['POST'])
-# ...(中略)... callback関数は同じ ...
+def callback():
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
 
 def get_or_create_user(user_id):
     user_res = supabase.table('users').select('*').eq('id', user_id).single().execute()
     if not user_res.data:
-        supabase.table('users').insert({'id': user_id, 'state': 'normal'}).execute()
-        return {'id': user_id, 'state': 'normal'}, True # 新規ユーザーフラグを立てる
+        supabase.table('users').insert({'id': user_id}).execute()
+        return {'id': user_id}, True # 新規ユーザーフラグを立てる
     return user_res.data, False
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
+    reply_message_obj = None
 
     user, is_new_user = get_or_create_user(user_id)
     
+    if is_new_user:
+        reply_message_obj = TextMessage(text="""はじめまして！
+僕は、あなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。
+まずは「追加」と送って、育てる作物を登録しましょう！""")
+    
+    # 【課題8】柔軟なコマンド解釈
+    elif any(p in text for p in PLANT_DATABASE.keys()):
+        matched_plant = next((p for p in PLANT_DATABASE.keys() if p in text), None)
+        if matched_plant:
+            reply_message_obj = create_date_selection_message(matched_plant)
+
+    elif text in ["追加", "登録", "作物を追加"]:
+        items = [QuickReplyItem(action=MessageAction(label=p, text=p)) for p in PLANT_DATABASE.keys()]
+        reply_message_obj = TextMessage(text="どの作物を登録しますか？", quick_reply=QuickReply(items=items))
+
+    elif text == "一覧":
+        plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id').execute().data
+        # 【課題9】インデント修正
+        if not plants:
+            reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
+        else:
+            reply_message_obj = create_plant_list_carousel(plants, PLANT_DATABASE)
+
+    elif text == "場所設定":
+        reply_message_obj = TextMessage(
+            text="あなたの栽培エリアの天気をより正確に予測するため、位置情報を教えてください。\n（チャット画面下部の「+」から位置情報を送信してください）",
+            quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
+        )
+
+    elif 'ヘルプ' in text.lower():
+        reply_message_obj = TextMessage(text="""【使い方ガイド】
+🌱作物の登録：「追加」と送信
+（ボタンでカンタン登録！）
+
+📈植物の管理：「一覧」と送信
+（状態確認、履歴、削除ができます）
+
+📍場所の登録：「場所設定」と送信
+（天気予報の精度が上がります）""")
+    else:
+        reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
+
+    if reply_message_obj:
+        with ApiClient(line_config) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            try:
+                line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
+            except ApiException as e:
+                print(f"API Error: status={e.status}, body={e.body}")
+
+@handler.add(MessageEvent, message=LocationMessageContent)
+def handle_location_message(event):
+    user_id = event.source.user_id
+    lat = event.message.latitude
+    lon = event.message.longitude
+    supabase.table('users').update({'latitude': lat, 'longitude': lon}).eq('id', user_id).execute()
+    reply_message_obj = TextMessage(text="位置情報を登録しました！これからはあなたの場所に合わせて、より正確な予測をお届けします。")
     with ApiClient(line_config) as api_client:
         line_bot_api = MessagingApi(api_client)
-
-        if is_new_user:
-            welcome_msg = TextMessage(text="はじめまして！\nあなたの植物栽培を科学的にサポートする「栽培コンシェルジュ」です。\nまずは「追加」と送って、育てる作物を登録しましょう！")
-            line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[welcome_msg]))
-            return
-
-        # 【課題8】柔軟なコマンド解釈
-        matched_plant = next((p for p in PLANT_DATABASE if p in text), None)
-        if matched_plant and "追加" in text:
-             # 「ミニトマトを追加」のような完全一致を優先
-             reply_message_obj = create_date_selection_message(matched_plant)
-        elif text in ["追加", "登録"]:
-             items = [QuickReplyItem(action=MessageAction(label=p, text=f"{p}を追加")) for p in PLANT_DATABASE.keys()]
-             reply_message_obj = TextMessage(text="どの作物を登録しますか？", quick_reply=QuickReply(items=items))
-        elif text == "一覧":
-             plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id').execute().data
-            if not plants:
-                reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
-            else:
-                reply_message_obj = create_plant_list_carousel(plants, PLANT_DATABASE)
-        elif text == "場所設定":
-            # ...(中略)... 元のコードと同じ ...
-        else:
-            reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
-
-        if reply_message_obj:
-            line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
-
-# ... handle_location_message は同じ ...
+        line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
     user_id = event.source.user_id
-    
-    # 日付ピッカーからのPostbackを処理
+    data_str = event.postback.data
+    data = dict(p.split('=') for p in data_str.split('&'))
+    action = data.get('action')
+    reply_message_obj = None
+
     if event.postback.params and 'date' in event.postback.params:
-        data_str = event.postback.data
-        data = dict(p.split('=') for p in data_str.split('&'))
-        plant_name = data.get('plant_name')
-        start_date = event.postback.params['date']
-        # この後の処理は 'set_start_date' アクションに合流させる
         action = 'set_start_date'
-    else:
-        data = dict(p.split('=') for p in event.postback.data.split('&'))
-        action = data.get('action')
-        start_date = None # 初期化
 
     with ApiClient(line_config) as api_client:
         line_bot_api = MessagingApi(api_client)
-        reply_message_obj = None
-
+        
         if action == 'set_start_date':
-            # 【課題1】栽培開始日の設定
             plant_name = data.get('plant_name')
+            start_date = event.postback.params.get('date') if event.postback.params else None
             
-            if start_date: # 日付ピッカーからの場合
-                pass
-            else: # 今日・昨日のボタンからの場合
+            if start_date is None: # 今日・昨日のボタンからの場合
                 date_param = data.get('date')
                 if date_param == 'today':
                     start_date = datetime.date.today().strftime('%Y-%m-%d')
@@ -138,7 +232,6 @@ def handle_postback(event):
                     start_date = (datetime.date.today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
             
             if plant_name and start_date:
-                # ユーザーが初めて植物を登録するかチェック
                 plant_count_res = supabase.table('user_plants').select('id', count='exact').eq('user_id', user_id).execute()
                 is_first_plant = plant_count_res.count == 0
 
@@ -147,16 +240,14 @@ def handle_postback(event):
                 
                 reply_messages = [TextMessage(text=f"「{plant_name}」を{start_date}から栽培開始として登録しました！\n「一覧」で確認できます。")]
                 
-                # 【課題3】能動的な場所設定の促し
                 user = supabase.table('users').select('latitude').eq('id', user_id).single().execute().data
-                if is_first_plant and not user.get('latitude'):
+                if is_first_plant and (not user or not user.get('latitude')):
                     location_prompt = TextMessage(
                         text="ありがとうございます！\nより正確な予測のため、あなたの栽培エリアの位置情報を教えてくれませんか？",
                         quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
                     )
                     reply_messages.append(location_prompt)
 
-                # 【課題7】初期投資アイテムの提案
                 plant_info = PLANT_DATABASE.get(plant_name, {})
                 initial_products = plant_info.get('initial_products')
                 if initial_products:
@@ -165,10 +256,17 @@ def handle_postback(event):
                         reply_messages.append(product_message)
 
                 line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=reply_messages))
-                return # 複数のメッセージを送信したのでここで終了
+                return
+
+        elif action == 'show_status':
+            plant_id = int(data.get('plant_id'))
+            plant_res = supabase.table('user_plants').select('*, plant_actions(*)').eq('id', plant_id).single().execute()
+            plant = plant_res.data
+            if plant: 
+                plant_info = PLANT_DATABASE.get(plant['plant_name'])
+                reply_message_obj = create_status_flex_message(user_id, plant, plant_info, plant['gdd'], supabase)
 
         elif action == 'show_log':
-            # 【課題9】お手入れ履歴の改善 (ページネーション)
             plant_id, plant_name = int(data.get('plant_id')), data.get('plant_name')
             offset = int(data.get('offset', 0))
             limit = 5
@@ -191,12 +289,50 @@ def handle_postback(event):
                 quick_reply_items.append(QuickReplyItem(action=PostbackAction(label="さらに過去の履歴を見る", data=f"action=show_log&plant_id={plant_id}&plant_name={plant_name}&offset={next_offset}")))
             
             reply_message_obj = TextMessage(text=reply_text, quick_reply=QuickReply(items=quick_reply_items) if quick_reply_items else None)
+        
+        elif action == 'confirm_delete':
+            plant_id, plant_name = data.get('plant_id'), data.get('plant_name')
+            bubble = FlexBubble(
+                body=FlexBox(layout='vertical', spacing='md', contents=[
+                    FlexText(text=f"「{plant_name}」を本当に削除しますか？", wrap=True, weight='bold', size='md'),
+                    FlexText(text="お手入れ履歴もすべて削除され、元に戻すことはできません。", size='sm', color='#AAAAAA', wrap=True)
+                ]),
+                footer=FlexBox(layout='horizontal', spacing='sm', contents=[
+                    FlexButton(style='primary', color='#ff5555', action=PostbackAction(label='はい、削除します', data=f"action=delete&plant_id={plant_id}")),
+                    FlexButton(style='secondary', action=PostbackAction(label='いいえ', data='action=cancel_delete'))
+                ]))
+            reply_message_obj = FlexMessage(alt_text='削除の確認', contents=bubble)
 
-        # ... その他のPostbackアクションは元のコードと同様 ...
+        elif action == 'delete':
+            plant_id = int(data.get('plant_id'))
+            supabase.table('plant_actions').delete().eq('user_plant_id', plant_id).execute()
+            supabase.table('user_plants').delete().eq('id', plant_id).execute()
+            reply_message_obj = TextMessage(text="削除しました。")
+            
+        elif action == 'cancel_delete':
+            reply_message_obj = TextMessage(text="操作をキャンセルしました。")
+        
+        elif action == 'show_product_link':
+            product_name = data.get('product_name', '商品')
+            link = data.get('link', 'https://example.com')
+            reply_text = f"こちらがおすすめの「{product_name}」のリンクです！\n{link}"
+            reply_message_obj = TextMessage(text=reply_text)
+
+        elif 'log_' in action:
+            plant_id = int(data.get('plant_id'))
+            action_log = {'user_plant_id': plant_id, 'action_type': action}
+            supabase.table('plant_actions').insert(action_log).execute()
+            reply_text = '💧水やりを記録しました！' if action == 'log_watering' else '🌱追肥を記録しました！'
+            reply_message_obj = TextMessage(text=reply_text)
 
         if reply_message_obj:
             line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[reply_message_obj]))
 
 # --- アプリケーション起動とスケジューラ設定 ---
 if __name__ == "__main__":
-    # ...(中略)... 元のコードと同じ ...
+    scheduler = BackgroundScheduler(daemon=True, timezone='Asia/Tokyo')
+    scheduler.add_job(check_and_send_notifications, 'cron', hour=8)
+    scheduler.start()
+    
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
