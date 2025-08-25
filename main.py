@@ -1,5 +1,4 @@
 # main.py
-
 import os
 import datetime
 import requests
@@ -14,12 +13,12 @@ from linebot.v3.messaging import (
     PushMessageRequest,
     TextMessage, FlexMessage, ApiException,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
-    LocationAction, URIAction, FlexBubble, FlexBox, FlexText, FlexButton
+    LocationAction, URIAction, FlexBubble, FlexBox, FlexText, FlexButton, FlexImage
 )
 from supabase import create_client, Client
 from plant_data import PLANT_DATABASE
 from flex_messages import (
-    create_plant_list_carousel, create_date_selection_message,
+    create_date_selection_message,
     create_initial_products_message, create_status_flex_message,
     create_welcome_message
 )
@@ -141,13 +140,18 @@ def handle_message(event):
 
     if text.startswith('カテゴリー：'):
         category = text.replace('カテゴリー：', '')
-        items = []
+        
+        plant_list = []
         for plant_name, data in PLANT_DATABASE.items():
             if data.get('category') == category:
-                items.append(QuickReplyItem(action=MessageAction(label=plant_name, text=plant_name)))
+                plant_list.append((plant_name, data.get('popularity', 99)))
+        
+        sorted_plants = sorted(plant_list, key=lambda x: x[1])
+        
+        items = [QuickReplyItem(action=MessageAction(label=plant[0], text=plant[0])) for plant in sorted_plants]
         
         if items:
-            reply_message_obj = TextMessage(text=f"「{category}」の仲間たちです。", quick_reply=QuickReply(items=items))
+            reply_message_obj = TextMessage(text=f"「{category}」の人気順です。", quick_reply=QuickReply(items=items))
         else:
             reply_message_obj = TextMessage(text=f"申し訳ありません、そのカテゴリーの作物はまだありません。")
 
@@ -161,11 +165,46 @@ def handle_message(event):
         if matched_plant:
             reply_message_obj = create_date_selection_message(matched_plant)
         elif text == "一覧":
-            plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=True).execute().data
+            limit = 11
+            plants_res = supabase.table('user_plants').select('*', count='exact').eq('user_id', user_id).order('id', desc=True).limit(limit).execute()
+            plants = plants_res.data
+            
             if not plants:
                 reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
             else:
-                reply_message_obj = create_plant_list_carousel(plants, PLANT_DATABASE)
+                total_count = plants_res.count
+                bubbles = []
+                for plant in plants:
+                    plant_info = PLANT_DATABASE.get(plant['plant_name'], {})
+                    bubble = FlexBubble(
+                        hero=FlexImage(url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='4:3', aspect_mode='cover', action=PostbackAction(label='status', data=f"action=show_status&plant_id={plant['id']}")),
+                        body=FlexBox(layout='vertical', spacing='md', contents=[
+                            FlexText(text=plant['plant_name'], weight='bold', size='xl'),
+                            FlexText(text=f"栽培開始: {plant['start_date']}", size='sm', color='#AAAAAA')
+                        ]),
+                        footer=FlexBox(layout='vertical', spacing='sm', contents=[
+                            FlexButton(style='primary', color='#00B900', action=PostbackAction(label='📈 状態を見る', data=f"action=show_status&plant_id={plant['id']}")),
+                            FlexButton(style='secondary', action=PostbackAction(label='📝 お手入れ履歴', data=f"action=show_log&plant_id={plant['id']}&plant_name={plant['plant_name']}&offset=0")),
+                            FlexButton(style='secondary', action=PostbackAction(label='🗑️ 削除', data=f"action=confirm_delete&plant_id={plant['id']}&plant_name={plant['plant_name']}"))
+                        ])
+                    )
+                    bubbles.append(bubble)
+
+                if total_count > limit:
+                    next_offset = limit
+                    next_page_button = FlexButton(
+                        style='primary', color='#42a5f5',
+                        action=PostbackAction(label="▶️ 次のページ", data=f"action=show_list&offset={next_offset}")
+                    )
+                    next_page_bubble = FlexBubble(
+                        body=FlexBox(layout='vertical', spacing='md', contents=[
+                            FlexText(text="もっと見る", size='md', align='center', weight='bold'),
+                            FlexText(text=f"全{total_count}件", size='sm', align='center', color='#aaaaaa'),
+                        ]),
+                        footer=FlexBox(layout='vertical', contents=[next_page_button])
+                    )
+                    bubbles.append(next_page_bubble)
+                reply_message_obj = FlexMessage(alt_text='登録植物一覧', contents=FlexCarousel(contents=bubbles))
         elif text == "場所設定":
             reply_message_obj = TextMessage(
                 text="あなたの栽培エリアの天気をより正確に予測するため、位置情報を教えてください。\n（チャット画面下部の「+」から位置情報を送信してください）",
@@ -259,7 +298,50 @@ def handle_postback(event):
             if plant:
                 plant_info = PLANT_DATABASE.get(plant['plant_name'])
                 reply_message_obj = create_status_flex_message(user_id, plant, plant_info, supabase)
+        
+        elif action == 'show_list':
+            offset = int(data.get('offset', 0))
+            limit = 11
+            plants_res = supabase.table('user_plants').select('*', count='exact').eq('user_id', user_id).order('id', desc=True).range(offset, offset + limit - 1).execute()
+            plants = plants_res.data
 
+            if not plants:
+                reply_message_obj = TextMessage(text="これ以上表示する植物はありません。")
+            else:
+                bubbles = []
+                for plant in plants:
+                    plant_info = PLANT_DATABASE.get(plant['plant_name'], {})
+                    bubble = FlexBubble(
+                        hero=FlexImage(url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'), size='full', aspect_ratio='4:3', aspect_mode='cover', action=PostbackAction(label='status', data=f"action=show_status&plant_id={plant['id']}")),
+                        body=FlexBox(layout='vertical', spacing='md', contents=[
+                            FlexText(text=plant['plant_name'], weight='bold', size='xl'),
+                            FlexText(text=f"栽培開始: {plant['start_date']}", size='sm', color='#AAAAAA')
+                        ]),
+                        footer=FlexBox(layout='vertical', spacing='sm', contents=[
+                            FlexButton(style='primary', color='#00B900', action=PostbackAction(label='📈 状態を見る', data=f"action=show_status&plant_id={plant['id']}")),
+                            FlexButton(style='secondary', action=PostbackAction(label='📝 お手入れ履歴', data=f"action=show_log&plant_id={plant['id']}&plant_name={plant['plant_name']}&offset=0")),
+                            FlexButton(style='secondary', action=PostbackAction(label='🗑️ 削除', data=f"action=confirm_delete&plant_id={plant['id']}&plant_name={plant['plant_name']}"))
+                        ])
+                    )
+                    bubbles.append(bubble)
+
+                if plants_res.count > offset + limit:
+                    next_offset = offset + limit
+                    next_page_button = FlexButton(
+                        style='primary', color='#42a5f5',
+                        action=PostbackAction(label="▶️ 次のページ", data=f"action=show_list&offset={next_offset}")
+                    )
+                    next_page_bubble = FlexBubble(
+                        body=FlexBox(layout='vertical', spacing='md', contents=[
+                            FlexText(text="もっと見る", size='md', align='center', weight='bold'),
+                            FlexText(text=f"全{plants_res.count}件", size='sm', align='center', color='#aaaaaa'),
+                        ]),
+                        footer=FlexBox(layout='vertical', contents=[next_page_button])
+                    )
+                    bubbles.append(next_page_bubble)
+
+                reply_message_obj = FlexMessage(alt_text='登録植物一覧', contents=FlexCarousel(contents=bubbles))
+        
         elif action == 'show_log':
             plant_id, plant_name = int(data.get('plant_id')), data.get('plant_name')
             offset = int(data.get('offset', 0))
