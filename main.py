@@ -33,7 +33,7 @@ supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# --- ヘルパー関数 ---
+# --- ヘルパー関数と通知関数 ---
 def get_weather_data(latitude, longitude, start_date, end_date):
     s_date = start_date.strftime('%Y-%m-%d')
     e_date = end_date.strftime('%Y-%m-%d')
@@ -55,7 +55,6 @@ def calculate_gdd(weather_data, base_temp=10.0):
             if avg_temp > base_temp: gdd += (avg_temp - base_temp)
     return gdd
 
-# --- プッシュ通知の心臓部 ---
 def check_and_send_notifications():
     print(f"--- {datetime.datetime.now()}: Running daily notification check ---")
     with app.app_context():
@@ -140,26 +139,40 @@ def handle_message(event):
 
     get_or_create_user(user_id)
 
-    matched_plant = next((p for p in PLANT_DATABASE if p in text), None)
-    if matched_plant:
-        reply_message_obj = create_date_selection_message(matched_plant)
-    elif text in ["追加", "登録", "作物を追加"]:
-        items = [QuickReplyItem(action=MessageAction(label=p, text=p)) for p in PLANT_DATABASE.keys()]
-        reply_message_obj = TextMessage(text="どの作物を登録しますか？", quick_reply=QuickReply(items=items))
-    elif text == "一覧":
-        # 【修正点】orderを 'id' の降順（新しい順）に変更
-        plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=True).execute().data
-        if not plants:
-            reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
+    if text.startswith('カテゴリー：'):
+        category = text.replace('カテゴリー：', '')
+        items = []
+        for plant_name, data in PLANT_DATABASE.items():
+            if data.get('category') == category:
+                items.append(QuickReplyItem(action=MessageAction(label=plant_name, text=plant_name)))
+        
+        if items:
+            reply_message_obj = TextMessage(text=f"「{category}」の仲間たちです。", quick_reply=QuickReply(items=items))
         else:
-            reply_message_obj = create_plant_list_carousel(plants, PLANT_DATABASE)
-    elif text == "場所設定":
-        reply_message_obj = TextMessage(
-            text="あなたの栽培エリアの天気をより正確に予測するため、位置情報を教えてください。\n（チャット画面下部の「+」から位置情報を送信してください）",
-            quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
-        )
-    elif 'ヘルプ' in text.lower():
-        reply_message_obj = TextMessage(text="""【使い方ガイド】
+            reply_message_obj = TextMessage(text=f"申し訳ありません、そのカテゴリーの作物はまだありません。")
+
+    elif text in ["追加", "登録", "作物を追加"]:
+        categories = sorted(list(set(data['category'] for data in PLANT_DATABASE.values())))
+        items = [QuickReplyItem(action=MessageAction(label=cat, text=f"カテゴリー：{cat}")) for cat in categories]
+        reply_message_obj = TextMessage(text="どのカテゴリーの作物を育てますか？", quick_reply=QuickReply(items=items))
+    
+    else:
+        matched_plant = next((p for p in PLANT_DATABASE if p == text), None)
+        if matched_plant:
+            reply_message_obj = create_date_selection_message(matched_plant)
+        elif text == "一覧":
+            plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id', desc=True).execute().data
+            if not plants:
+                reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
+            else:
+                reply_message_obj = create_plant_list_carousel(plants, PLANT_DATABASE)
+        elif text == "場所設定":
+            reply_message_obj = TextMessage(
+                text="あなたの栽培エリアの天気をより正確に予測するため、位置情報を教えてください。\n（チャット画面下部の「+」から位置情報を送信してください）",
+                quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
+            )
+        elif 'ヘルプ' in text.lower():
+            reply_message_obj = TextMessage(text="""【使い方ガイド】
 🌱作物の登録：「追加」と送信
 （ボタンでカンタン登録！）
 
@@ -168,10 +181,6 @@ def handle_message(event):
 
 📍場所の登録：「場所設定」と送信
 （天気予報の精度が上がります）""")
-    else:
-        # リッチメニューからのタップを想定し、不明なテキストには応答しないようにする
-        # reply_message_obj = TextMessage(text="「一覧」または「追加」と送ってみてくださいね。分からなければ「ヘルプ」とどうぞ！")
-        pass
 
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
@@ -220,12 +229,12 @@ def handle_postback(event):
                 plant_count_res = supabase.table('user_plants').select('id', count='exact').eq('user_id', user_id).execute()
                 is_first_plant = plant_count_res.count == 0
 
-                new_plant = {'user_id': user_id, 'plant_name': plant_name, 'start_date': start_date}
-                supabase.table('user_plants').insert(new_plant).execute()
+                new_plant_data = {'user_id': user_id, 'plant_name': plant_name, 'start_date': start_date}
+                inserted_plant = supabase.table('user_plants').insert(new_plant_data).execute().data[0]
                 
-                reply_messages = [TextMessage(text=f"「{plant_name}」を{start_date}から栽培開始として登録しました！\n「一覧」で確認できます。")]
-                
-                line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=reply_messages))
+                plant_info = PLANT_DATABASE.get(plant_name)
+                status_message = create_status_flex_message(user_id, inserted_plant, plant_info, supabase)
+                line_bot_api.reply_message(ReplyMessageRequest(reply_token=event.reply_token, messages=[status_message]))
 
                 user_res = supabase.table('users').select('latitude').eq('id', user_id).single().execute()
                 user = user_res.data
@@ -236,7 +245,6 @@ def handle_postback(event):
                     )
                     line_bot_api.push_message(PushMessageRequest(to=user_id, messages=[location_prompt]))
 
-                plant_info = PLANT_DATABASE.get(plant_name, {})
                 initial_products = plant_info.get('initial_products')
                 if initial_products:
                     product_message = create_initial_products_message(plant_name, initial_products)
