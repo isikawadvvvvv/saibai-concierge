@@ -88,7 +88,7 @@ def handle_message(event):
              items = [QuickReplyItem(action=MessageAction(label=p, text=f"{p}を追加")) for p in PLANT_DATABASE.keys()]
              reply_message_obj = TextMessage(text="どの作物を登録しますか？", quick_reply=QuickReply(items=items))
         elif text == "一覧":
-            plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id').execute().data
+             plants = supabase.table('user_plants').select('*').eq('user_id', user_id).order('id').execute().data
             if not plants:
                 reply_message_obj = TextMessage(text="まだ植物が登録されていません。「追加」から新しい仲間を迎えましょう！")
             else:
