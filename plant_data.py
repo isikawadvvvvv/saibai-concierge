@@ -1,10 +1,9 @@
 # plant_data.py
-
 PLANT_DATABASE = {
     'ミニトマト': {
         'base_temp': 10.0, 'image_url': 'https://images.pexels.com/photos/7208483/pexels-photo-7208483.jpeg', 'avg_gdd_per_day': 15,
         'initial_products': [
-            {'name': 'スターターセット', 'link': 'https://amzn.to/40aoawy', 'reason': '土、プランター、肥料が全部入りで初心者に最適！'},
+            {'name': 'スターターセット', 'link': 'https://amzn.to/3yTqW4S', 'reason': '土、プランター、肥料が全部入りで初心者に最適！'},
             {'name': 'トマト用培養土', 'link': 'https://amzn.to/3VzXy8K', 'reason': '甘いトマトを育てるための栄養がたっぷり。'},
         ],
         'events': [
