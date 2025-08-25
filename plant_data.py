@@ -57,7 +57,7 @@ PLANT_DATABASE = {
         ],
         'events': [{'gdd': 150, 'advice': '本葉が10枚以上になったら、摘心（てきしん）をしましょう。', 'what': '一番上の芽', 'how': '先端をハサミでカットすると、脇芽が増えて収穫量がアップします。'}, {'gdd': 300, 'advice': '収穫が始まります！葉が茂ってきたら、2週間に1回程度の追肥を。', 'what': '液体肥料', 'how': '規定の倍率に薄めたものを、水やり代わりに与えると手軽です。'}]
     },
-    'ミニダイコン': {
+    'ダイコン': {
         'base_temp': 5.0,
         'image_url': 'https://images.pexels.com/photos/14982333/pexels-photo-14982333.jpeg',
         'avg_gdd_per_day': 11,
@@ -84,7 +84,7 @@ PLANT_DATABASE = {
             {'gdd': 800, 'advice': '収穫のサインを見逃すな！', 'what': '全体の7〜8割の葉が自然に倒れたら、それが収穫の合図です。', 'how': '晴れた日を選んで、株を引き抜きます。収穫後、葉を付けたまま2〜3日、畑で乾燥させると長持ちします。'}
         ]
     },
-    'ミニハクサイ': {
+    'ハクサイ': {
         'base_temp': 5.0,
         'image_url': 'https://images.pexels.com/photos/5443209/pexels-photo-5443209.jpeg',
         'avg_gdd_per_day': 13,
