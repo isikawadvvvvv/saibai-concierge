@@ -1,4 +1,5 @@
 # main.py
+
 import os
 import datetime
 import requests
@@ -13,7 +14,8 @@ from linebot.v3.messaging import (
     PushMessageRequest,
     TextMessage, FlexMessage, ApiException,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
-    LocationAction, URIAction, FlexBubble, FlexBox, FlexText, FlexButton, FlexImage
+    LocationAction, URIAction, FlexBubble, FlexBox, FlexText, FlexButton, FlexImage,
+    FlexCarousel  # ★★★ ここを追加 ★★★
 )
 from supabase import create_client, Client
 from plant_data import PLANT_DATABASE
