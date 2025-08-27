@@ -35,6 +35,11 @@ def create_welcome_message():
                     style='secondary',
                     action=MessageAction(label='使い方を見る (ヘルプ)', text='ヘルプ')
                 ),
+                FlexButton(
+                    style='link',
+                    height='sm',
+                    action=URIAction(label='ご意見・ご感想を送る', uri='[ここにGoogleフォームのURLを貼り付け]')
+                )
             ]
         )
     )
@@ -166,30 +171,6 @@ def create_status_flex_message(user_id, plant, plant_info, supabase_client):
             FlexButton(style='primary', height='sm', action=PostbackAction(label="🌱 追肥を記録する", data=f"action=log_fertilizer&plant_id={plant['id']}"), color="#66bb6a")
         ]))
     return FlexMessage(alt_text=f"{plant['plant_name']}の状態", contents=bubble)
-
-
-def create_plant_list_carousel(plants, plant_database):
-    bubbles = []
-    for plant in plants:
-        plant_info = plant_database.get(plant['plant_name'], {})
-        bubble = FlexBubble(
-            hero=FlexImage(
-                url=plant_info.get('image_url', 'https://example.com/placeholder.jpg'),
-                size='full', aspect_ratio='4:3', aspect_mode='cover',
-                action=PostbackAction(label='status', data=f"action=show_status&plant_id={plant['id']}")
-            ),
-            body=FlexBox(layout='vertical', spacing='md', contents=[
-                FlexText(text=plant['plant_name'], weight='bold', size='xl'),
-                FlexText(text=f"栽培開始: {plant['start_date']}", size='sm', color='#AAAAAA')
-            ]),
-            footer=FlexBox(layout='vertical', spacing='sm', contents=[
-                FlexButton(style='primary', color='#00B900', action=PostbackAction(label='📈 状態を見る', data=f"action=show_status&plant_id={plant['id']}")),
-                FlexButton(style='secondary', action=PostbackAction(label='📝 お手入れ履歴', data=f"action=show_log&plant_id={plant['id']}&plant_name={plant['plant_name']}&offset=0")),
-                FlexButton(style='secondary', action=PostbackAction(label='🗑️ 削除', data=f"action=confirm_delete&plant_id={plant['id']}&plant_name={plant['plant_name']}"))
-            ])
-        )
-        bubbles.append(bubble)
-    return FlexMessage(alt_text='登録植物一覧', contents=FlexCarousel(contents=bubbles))
 
 def create_date_selection_message(plant_name):
     return TextMessage(

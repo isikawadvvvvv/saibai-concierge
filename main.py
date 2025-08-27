@@ -213,15 +213,18 @@ def handle_message(event):
                 quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="位置情報を送信する"))])
             )
         elif 'ヘルプ' in text.lower():
-            reply_message_obj = TextMessage(text="""【使い方ガイド】
+            help_text = """【使い方ガイド】
 🌱作物の登録：「追加」と送信
-（ボタンでカンタン登録！）
-
 📈植物の管理：「一覧」と送信
-（状態確認、履歴、削除ができます）
-
 📍場所の登録：「場所設定」と送信
-（天気予報の精度が上がります）""")
+
+---
+利用規約：
+[ここに利用規約を掲載したページのURLを貼り付け]
+
+サービスの改善にご協力ください！
+[https://forms.gle/dKmb6JsQ5ZNbz8QN9]"""
+            reply_message_obj = TextMessage(text=help_text)
 
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
