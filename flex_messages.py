@@ -120,21 +120,17 @@ def create_status_flex_message(user_id, plant, plant_info, supabase_client):
     
     advice_contents = []
     advice_title = "栽培完了！"
-    advice_what = "お疲れ様でした！"
-    advice_how = "収穫を楽しんでくださいね。"
+    # 'how'と'what'を統合した、より分かりやすいアドバイス文を生成
+    advice_text = "お疲れ様でした！収穫を楽しんでくださいね。"
+
     if next_event:
         advice_title = next_event['advice']
-        advice_what = next_event.get('what', '---')
-        advice_how = next_event.get('how', '---')
-    
+        advice_text = next_event.get('how', '具体的な作業内容を確認してください。')
+
     advice_box = FlexBox(layout='vertical', margin='lg', spacing='md', contents=[
         FlexText(text=advice_title, weight='bold', wrap=True, size='lg', color='#1E88E5'),
-        FlexBox(layout='vertical', margin='lg', spacing='sm', contents=[
-            FlexText(text="Q：どんなアドバイス？", weight='bold', size='sm', color='#555555'),
-            FlexText(text=advice_what, wrap=True, size='sm'),
-            FlexSeparator(margin='md'),
-            FlexText(text="Q：どうすればいい？", weight='bold', size='sm', color='#555555', margin='sm'),
-            FlexText(text=advice_how, wrap=True, size='sm'),
+        FlexBox(layout='vertical', margin='md', spacing='sm', contents=[
+            FlexText(text=advice_text, wrap=True, size='sm'),
         ])
     ])
     advice_contents.extend([FlexSeparator(margin='xl'), advice_box])
