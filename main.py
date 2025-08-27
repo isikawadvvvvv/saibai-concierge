@@ -214,17 +214,24 @@ def handle_message(event):
             )
         elif 'ヘルプ' in text.lower():
             help_text = """【使い方ガイド】
-🌱作物の登録：「追加」と送信
-📈植物の管理：「一覧」と送信
-📍場所の登録：「場所設定」と送信
+🌱作物の登録：「追加」
+📈植物の管理：「一覧」
+📍場所の登録：「場所設定」
 
 ---
-利用規約：
-[ここに利用規約を掲載したページのURLを貼り付け]
-
 サービスの改善にご協力ください！
-[https://forms.gle/dKmb6JsQ5ZNbz8QN9]"""
+https://forms.gle/xCs7bDXNSc6A5xL6A"""
             reply_message_obj = TextMessage(text=help_text)
+        
+        else:
+            reply_message_obj = TextMessage(
+                text="ごめんなさい、よく分かりませんでした。\nメニューから操作を選ぶか、下のボタンを試してみてください。",
+                quick_reply=QuickReply(items=[
+                    QuickReplyItem(action=MessageAction(label="🌱 作物を追加", text="追加")),
+                    QuickReplyItem(action=MessageAction(label="📈 一覧を見る", text="一覧")),
+                    QuickReplyItem(action=MessageAction(label="❓ ヘルプ", text="ヘルプ"))
+                ])
+            )
 
     if reply_message_obj:
         with ApiClient(line_config) as api_client:
