@@ -1,5 +1,4 @@
 # main.py
-
 import os
 import datetime
 import requests
@@ -15,13 +14,14 @@ from linebot.v3.messaging import (
     TextMessage, FlexMessage, ApiException,
     PostbackAction, MessageAction, QuickReply, QuickReplyItem,
     LocationAction, URIAction, FlexBubble, FlexBox, FlexText, FlexButton, FlexImage,
-    FlexCarousel  # ★★★ ここを追加 ★★★
+    FlexCarousel
 )
 from supabase import create_client, Client
 from plant_data import PLANT_DATABASE
 from flex_messages import (
     create_date_selection_message,
-    create_initial_products_message, create_status_flex_message,
+    create_consumables_message,
+    create_status_flex_message,
     create_welcome_message
 )
 
@@ -271,7 +271,7 @@ def handle_postback(event):
                 is_first_plant = plant_count_res.count == 0
 
                 new_plant_data = {'user_id': user_id, 'plant_name': plant_name, 'start_date': start_date}
-                inserted_plant = supabase.table('user_plants').insert(new_plant_data).execute().data[0]
+                inserted_plant = supabase.table('user_plants').insert(new_plant_data, count='exact').execute().data[0]
                 
                 plant_info = PLANT_DATABASE.get(plant_name)
                 status_message = create_status_flex_message(user_id, inserted_plant, plant_info, supabase)
@@ -286,9 +286,9 @@ def handle_postback(event):
                     )
                     line_bot_api.push_message(PushMessageRequest(to=user_id, messages=[location_prompt]))
 
-                initial_products = plant_info.get('initial_products')
-                if initial_products:
-                    product_message = create_initial_products_message(plant_name, initial_products)
+                recurring_consumables = plant_info.get('recurring_consumables')
+                if recurring_consumables:
+                    product_message = create_consumables_message(plant_name, recurring_consumables)
                     if product_message:
                         line_bot_api.push_message(PushMessageRequest(to=user_id, messages=[product_message]))
                 return

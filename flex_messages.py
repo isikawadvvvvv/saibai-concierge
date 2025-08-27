@@ -62,11 +62,8 @@ def calculate_gdd(weather_data, base_temp=10.0):
     return gdd
 
 def create_status_flex_message(user_id, plant, plant_info, supabase_client):
-    # ★★★ ここから修正 ★★★
     if plant_info is None:
-        # もしplant_infoがNone（データベースに情報がない）なら、エラーメッセージを返す
         return TextMessage(text=f"申し訳ありません、「{plant.get('plant_name', '不明な作物')}」の栽培データが見つかりませんでした。お手数ですが、一度削除して再登録をお試しください。")
-    # ★★★ 修正ここまで ★★★
 
     user_res = supabase_client.table('users').select('latitude, longitude').eq('id', user_id).single().execute()
     user_data = user_res.data or {}
@@ -120,7 +117,6 @@ def create_status_flex_message(user_id, plant, plant_info, supabase_client):
     
     advice_contents = []
     advice_title = "栽培完了！"
-    # 'how'と'what'を統合した、より分かりやすいアドバイス文を生成
     advice_text = "お疲れ様でした！収穫を楽しんでくださいね。"
 
     if next_event:
@@ -205,17 +201,17 @@ def create_date_selection_message(plant_name):
         ])
     )
 
-def create_initial_products_message(plant_name, products):
+def create_consumables_message(plant_name, consumables):
     bubbles = []
-    for product in products:
+    for consumable in consumables:
         bubble = FlexBubble(
             body=FlexBox(layout='vertical', spacing='md', contents=[
-                FlexText(text=f"「{plant_name}」栽培の準備", weight='bold', size='lg', wrap=True),
-                FlexText(text="まずはこちらから揃えませんか？", size='sm', color='#666666', wrap=True),
+                FlexText(text=f"「{plant_name}」栽培にあると便利", weight='bold', size='lg', wrap=True),
+                FlexText(text="栽培中によく使うアイテムです。", size='sm', color='#666666', wrap=True),
                 FlexSeparator(margin='lg'),
-                FlexText(text=product['name'], weight='bold', margin='md'),
-                FlexText(text=product['reason'], size='xs', wrap=True, color='#AAAAAA'),
-                FlexButton(style='link', action=URIAction(label="商品を見る (Amazon)", uri=product['link']), margin='md')
+                FlexText(text=consumable['name'], weight='bold', margin='md'),
+                FlexText(text=consumable['reason'], size='xs', wrap=True, color='#AAAAAA'),
+                FlexButton(style='link', action=URIAction(label="商品を見る (Amazon)", uri=consumable['link']), margin='md')
             ])
         )
         bubbles.append(bubble)
@@ -223,4 +219,4 @@ def create_initial_products_message(plant_name, products):
     if not bubbles:
         return None
 
-    return FlexMessage(alt_text=f"{plant_name}のおすすめ商品", contents=FlexCarousel(contents=bubbles))
+    return FlexMessage(alt_text=f"{plant_name}のおすすめ消耗品", contents=FlexCarousel(contents=bubbles))
