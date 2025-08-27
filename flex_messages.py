@@ -62,6 +62,12 @@ def calculate_gdd(weather_data, base_temp=10.0):
     return gdd
 
 def create_status_flex_message(user_id, plant, plant_info, supabase_client):
+    # ★★★ ここから修正 ★★★
+    if plant_info is None:
+        # もしplant_infoがNone（データベースに情報がない）なら、エラーメッセージを返す
+        return TextMessage(text=f"申し訳ありません、「{plant.get('plant_name', '不明な作物')}」の栽培データが見つかりませんでした。お手数ですが、一度削除して再登録をお試しください。")
+    # ★★★ 修正ここまで ★★★
+
     user_res = supabase_client.table('users').select('latitude, longitude').eq('id', user_id).single().execute()
     user_data = user_res.data or {}
     lat = user_data.get('latitude', 35.66)
