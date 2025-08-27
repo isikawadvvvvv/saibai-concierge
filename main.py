@@ -223,12 +223,16 @@ def handle_message(event):
 https://forms.gle/xCs7bDXNSc6A5xL6A"""
             reply_message_obj = TextMessage(text=help_text)
         
+        elif text == "フィードバック":
+            reply_message_obj = TextMessage(text="サービスの改善にご協力いただきありがとうございます！\n以下のリンクからご意見をお聞かせください。\n\nhttps://forms.gle/xCs7bDXNSc6A5xL6A")
+        
         else:
             reply_message_obj = TextMessage(
-                text="ごめんなさい、よく分かりませんでした。\nメニューから操作を選ぶか、下のボタンを試してみてください。",
+                text="下のボタンから操作を選んでください。",
                 quick_reply=QuickReply(items=[
                     QuickReplyItem(action=MessageAction(label="🌱 作物を追加", text="追加")),
                     QuickReplyItem(action=MessageAction(label="📈 一覧を見る", text="一覧")),
+                    QuickReplyItem(action=MessageAction(label="✉️ フィードバック", text="フィードバック")),
                     QuickReplyItem(action=MessageAction(label="❓ ヘルプ", text="ヘルプ"))
                 ])
             )
