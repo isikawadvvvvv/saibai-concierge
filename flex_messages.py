@@ -1,10 +1,10 @@
 # flex_messages.py
+import datetime
+import requests
 from linebot.v3.messaging import (
     FlexMessage, FlexBubble, FlexCarousel, FlexBox, FlexText, FlexImage, FlexButton, FlexSeparator,
     PostbackAction, MessageAction, DatetimePickerAction, URIAction, TextMessage, QuickReply, QuickReplyItem
 )
-import datetime
-import requests
 
 def create_welcome_message():
     bubble = FlexBubble(
@@ -80,13 +80,29 @@ def create_status_flex_message(user_id, plant, plant_info, supabase_client):
         FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='栽培日数', color='#aaaaaa', size='sm', flex=3), FlexText(text=f"{(today - start_date).days + 1}日目", wrap=True, color='#666666', size='sm', flex=5)]),
         FlexBox(layout='baseline', spacing='sm', contents=[FlexText(text='積算温度', color='#aaaaaa', size='sm', flex=3), FlexText(text=f"{gdd:.1f}℃・日", wrap=True, color='#666666', size='sm', flex=5)])
     ]
+
+    care_info_contents = [
+        FlexSeparator(margin='xl'),
+        FlexText(text="お手入れの目安", weight='bold', size='md', margin='lg'),
+        FlexBox(layout='vertical', margin='md', spacing='sm', contents=[
+            FlexBox(layout='baseline', spacing='sm', contents=[
+                FlexText(text='💧水やり', color='#aaaaaa', size='sm', flex=3),
+                FlexText(text=plant_info.get('watering_freq', '---'), wrap=True, color='#666666', size='sm', flex=5)
+            ]),
+            FlexBox(layout='baseline', spacing='sm', contents=[
+                FlexText(text='🌱追肥', color='#aaaaaa', size='sm', flex=3),
+                FlexText(text=plant_info.get('fertilizer_freq', '---'), wrap=True, color='#666666', size='sm', flex=5)
+            ])
+        ])
+    ]
+
     progress_contents = []
     if next_event:
         progress = (gdd / next_event['gdd']) * 100 if next_event['gdd'] > 0 else 100
         days_to_event = (next_event['gdd'] - gdd) / plant_info.get('avg_gdd_per_day', 15) if plant_info.get('avg_gdd_per_day', 15) > 0 else 0
         progress_contents.extend([
             FlexSeparator(margin='xl'),
-            FlexText(text="次のイベントへの進捗", size='md', weight='bold', margin='lg'),
+            FlexText(text=f"次の作業：{next_event['advice']}", weight='bold', size='md', margin='lg', wrap=True),
             FlexBox(layout='vertical', margin='md', contents=[
                 FlexText(text=f"{progress:.0f}%", size='sm', color='#555555'),
                 FlexBox(layout='vertical', margin='sm', background_color='#E0E0E0', corner_radius='5px', height='10px', contents=[
@@ -141,7 +157,10 @@ def create_status_flex_message(user_id, plant, plant_info, supabase_client):
         body=FlexBox(layout='vertical', spacing='lg', contents=[
             *header_contents,
             FlexBox(layout='vertical', margin='lg', spacing='md', contents=basic_info_contents),
-            *progress_contents, *advice_contents, *recommendation_contents
+            *care_info_contents,
+            *progress_contents,
+            *advice_contents,
+            *recommendation_contents
         ]),
         footer=FlexBox(layout='vertical', spacing='md', contents=[
             FlexSeparator(),
