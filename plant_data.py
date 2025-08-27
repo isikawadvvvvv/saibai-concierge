@@ -1,25 +1,25 @@
 # plant_data.py
 PLANT_DATABASE = {
     'ベビーリーフ': {
-        'category': '秋冬野菜', 'popularity': 1, 'base_temp': 5.0, 'image_url': 'blob:https://labs.google/d2a8e6b5-900a-4710-9be3-3d62267d2b8d', 'avg_gdd_per_day': 9,
+        'category': '秋冬野菜', 'popularity': 1, 'base_temp': 5.0, 'image_url': 'https://t4.ftcdn.net/jpg/00/77/96/89/240_F_77968929_IHVqfnPi8Sywkb3Ket5NBRdHFl7r9z7I.jpg', 'avg_gdd_per_day': 9,
         'watering_freq': '土の表面が乾いたら、鉢底から水が出るまでたっぷりと。霧吹きで葉に水をかけるのも効果的です。', 'fertilizer_freq': '2〜3回摘み取って収穫した後、葉の色が薄くなってきたら液体肥料を与えます。',
         'initial_products': [{'name': 'ベビーリーフミックスの種', 'link': 'https://amzn.to/3VEzW1W', 'reason': '様々な種類のレタスが混ざっており、彩り豊かなサラダがこれ一つで楽しめます。'}, {'name': '浅めのプランター', 'link': 'https://amzn.to/3RjV0gR', 'reason': 'ベビーリーフは根が浅いため、浅くて幅の広いプランターが育てやすいです。'}],
         'events': [{'gdd': 200, 'advice': '収穫を開始できます！', 'what': '草丈が10cm程度になったら、いつでも収穫可能です。', 'how': '外側の葉から、必要な分だけハサミで切り取って収穫します。中心の新しい葉を残しておけば、次々と新しい葉が出てきて、長期間収穫を楽しめます。'}, {'gdd': 350, 'advice': '元気がなくなってきたら追肥を。', 'what': '2〜3回ほど収穫した後、葉の色が薄くなってきたら追肥のサインです。', 'how': '薄めた液体肥料を、水やり代わりに週に1回程度与えましょう。', 'product_name': '速効性のある液体肥料', 'affiliate_link': 'https://amzn.to/3Rk4uTf', 'recommendation_reason': '継続的に収穫するためには、定期的な栄養補給が不可欠。即効性のある液体肥料が最適です。'}]
     },
     'コマツナ': {
-        'category': '秋冬野菜', 'popularity': 2, 'base_temp': 5.0, 'image_url': 'blob:https://labs.google/f8c8ede0-0000-45fe-9c0f-2d197bc0bb76', 'avg_gdd_per_day': 10,
+        'category': '秋冬野菜', 'popularity': 2, 'base_temp': 5.0, 'image_url': 'https://t4.ftcdn.net/jpg/04/81/34/17/240_F_481341790_wly5cGVM4xj1llANj36hDaxMzJzVLEHh.jpg', 'avg_gdd_per_day': 10,
         'watering_freq': '土の表面が乾いたらたっぷりと。特に発芽までは土を乾かさないように注意が必要です。', 'fertilizer_freq': '本葉が4〜5枚になったら、2週間に1回のペースで追肥します。',
         'initial_products': [{'name': 'コマツナ栽培セット', 'link': 'https://amzn.to/3VDEm0c', 'reason': 'プランター、土、種が全て揃っており、すぐに栽培を開始できます。'}, {'name': '有機野菜の土', 'link': 'https://amzn.to/3VEzW1W', 'reason': '栄養豊富でふかふかの土は、美味しいコマツナ作りの第一歩です。'}],
         'events': [{'gdd': 120, 'advice': '間引きのタイミングです！', 'what': '混み合った部分の苗を、指でつまんで根元からそっと引き抜きます。', 'how': '本葉が1〜2枚の頃が目安。株同士の間隔が3cm程度になるように調整しましょう。良い苗を残すのがコツです。'}, {'gdd': 250, 'advice': '最初の追肥を行いましょう！', 'what': '液体肥料、または化成肥料がおすすめです。', 'how': '液体肥料なら週に1回、水やり代わりに。化成肥料なら、株元にパラパラと撒き、土と軽く混ぜ合わせます。', 'product_name': '野菜用の液体肥料', 'affiliate_link': 'https://amzn.to/3Rk4uTf', 'recommendation_reason': 'ここからの成長が著しい時期。栄養をしっかり与えることで、葉が大きく肉厚になります。'}, {'gdd': 450, 'advice': '収穫の時期です！', 'what': '草丈が20〜25cmになったら収穫の合図です。', 'how': '株元をハサミで切り取るか、根元から引き抜いて収穫します。大きく育ったものから順に収穫すると、長く楽しめます。'}]
     },
     'ミニダイコン': {
-        'category': '秋冬野菜', 'popularity': 3, 'base_temp': 5.0, 'image_url': 'blob:https://labs.google/430f4e14-091a-43c2-8191-ef24f8d5e641', 'avg_gdd_per_day': 11,
+        'category': '秋冬野菜', 'popularity': 3, 'base_temp': 5.0, 'image_url': 'https://t4.ftcdn.net/jpg/00/28/09/23/240_F_28092323_SJgNJkg1aZ1ltyte7fdIwEzDf8cLV6Ln.jpg', 'avg_gdd_per_day': 11,
         'watering_freq': '土の表面が乾いたら、たっぷりと与えます。根が太り始めたら、乾燥させすぎないように注意。', 'fertilizer_freq': '間引きが終わった後、2週間に1回のペースで追肥します。',
         'initial_products': [{'name': '深型プランター (20cm以上)', 'link': 'https://amzn.to/3Xp5sJq', 'reason': 'ミニでも根は深く伸びます。十分な深さを確保することが、まっすぐなダイコンを育てる秘訣です。'}, {'name': 'かるいプランターの土', 'link': 'https://amzn.to/3VEzW1W', 'reason': '水はけの良い、ふかふかの土がダイコンのベッドに最適です。'}],
         'events': [{'gdd': 130, 'advice': '間引きのタイミングです！', 'what': '本葉が1〜2枚になったら、形の良いものを残して1本に絞ります。', 'how': '残す株を傷つけないよう、間引く株の根元をハサミで切り取るのが最も安全で確実な方法です。'}, {'gdd': 280, 'advice': '追肥と土寄せを行いましょう。', 'what': '化成肥料を株元に与えます。', 'how': '肥料を撒いた後、ダイコンの根の白い部分（肩）が土から見えていたら、土を寄せて隠してあげましょう。光に当たると緑色になってしまいます。', 'product_name': '野菜用の化成肥料', 'affiliate_link': 'https://amzn.to/4c5kX7s', 'recommendation_reason': '根が太り始める重要な時期。栄養を補給し、美しいダイコンに育てましょう。'}, {'gdd': 650, 'advice': 'いよいよ収穫です！', 'what': '土から出ている根の直径が5〜7cmになったら収穫の目安です。', 'how': '葉の付け根をしっかりと持ち、まっすぐ上に引き抜きます。収穫が遅れると「す」が入って食感が悪くなるので注意しましょう。'}]
     },
     '小カブ': {
-        'category': '秋冬野菜', 'popularity': 4, 'base_temp': 5.0, 'image_url': 'blob:https://labs.google/c78b0387-a137-4cae-8987-2314d40181db', 'avg_gdd_per_day': 12,
+        'category': '秋冬野菜', 'popularity': 4, 'base_temp': 5.0, 'image_url': 'https://t3.ftcdn.net/jpg/01/21/28/84/240_F_121288401_kYk3S9OX7lvBlMuqlKjjjxX8SKz2aGYB.jpg', 'avg_gdd_per_day': 12,
         'watering_freq': '乾燥に弱いので、土の表面が乾いたら必ず水をやりましょう。特に根が大きくなる時期は重要です。', 'fertilizer_freq': '2回目の間引きの後と、根が太り始める頃の計2回、追肥を行います。',
         'initial_products': [{'name': '深めのプランター', 'link': 'https://amzn.to/3Xp5sJq', 'reason': 'カブの根がしっかり育つスペースを確保するために、深さ15cm以上のプランターを選びましょう。'}, {'name': 'カブの種（小カブ品種）', 'link': 'https://amzn.to/3VEA7hV', 'reason': '「あやめ雪」や「もものすけ」など、カラフルで育てやすい品種が人気です。'}],
         'events': [{'gdd': 150, 'advice': '間引きの時期です。', 'what': '双葉が開いたら最初の間引き。形の良いものを残し、3cm間隔にします。', 'how': '本葉が2〜3枚になったら2回目の間引きを行い、最終的に株間を10cm程度に広げます。'}, {'gdd': 300, 'advice': '追肥と土寄せをしましょう。', 'what': '化成肥料を株元に与えます。', 'how': '肥料を与えた後、カブの根元が少し膨らんできたら、肩の部分に土を寄せてあげます。こうすることで、形が良く、きれいなカブに育ちます。', 'product_name': '野菜用の化成肥料', 'affiliate_link': 'https://amzn.to/4c5kX7s', 'recommendation_reason': '根が大きくなり始める、最も栄養が必要なタイミングです。しっかり追肥しましょう。'}, {'gdd': 600, 'advice': '収穫のタイミングです！', 'what': '根の直径が5〜6cmになったら収穫しましょう。', 'how': '葉の付け根を持って、まっすぐ上に引き抜きます。収穫が遅れると、根が割れてしまう（裂根）ことがあるので注意が必要です。'}]
@@ -62,7 +62,7 @@ PLANT_DATABASE = {
         'events': [{'gdd': 400, 'advice': '一番花が咲いたら追肥のサイン！', 'what': '化成肥料を使いましょう。', 'how': '株元に少量与えます。', 'product_name': 'ピーマン・パプリカの肥料', 'affiliate_link': 'https://amzn.to/4kl8ldT', 'recommendation_reason': '液体肥料は即効性があり、すぐに栄養を届けたいこの時期にぴったりです。'}, {'gdd': 900, 'advice': '実がなり始めました。', 'what': '水やりを管理しましょう。', 'how': '乾燥に注意し、水やりを欠かさないようにしましょう。'}]
     },
     'ミニハクサイ': {
-        'category': '秋冬野菜', 'popularity': 12, 'base_temp': 5.0, 'image_url': 'blob:https://labs.google/47ae8e35-64c0-4bc2-926c-ecd1924e779e', 'avg_gdd_per_day': 13,
+        'category': '秋冬野菜', 'popularity': 12, 'base_temp': 5.0, 'image_url': 'https://thumb.photo-ac.com/8a/8ae02c356fd4f5bc69bb39fbf736c875_t.jpeg', 'avg_gdd_per_day': 13,
         'watering_freq': '乾燥に弱いので、土の表面が乾いたらたっぷりと水を与えます。', 'fertilizer_freq': '植え付け2週間後と、その3週間後の計2回、追肥を行います。',
         'initial_products': [{'name': 'ミニハクサイの種', 'link': 'https://amzn.to/4eiy4pS', 'reason': '通常のハクサイより結球しやすく、プランターでも60〜70日で収穫できるため初心者におすすめです。'}, {'name': '防虫ネット', 'link': 'https://amzn.to/3VEA7hV', 'reason': 'アオムシなどの害虫から柔らかい葉を守るための必須アイテム。トンネル支柱とセットで使いましょう。'}],
         'events': [{'gdd': 300, 'advice': '追肥と土寄せの時期です。', 'what': '本葉が5〜6枚になったら、化成肥料を追肥します。', 'how': '肥料を株の周りに撒き、株が倒れないように根元に軽く土を寄せてあげます。'}, {'gdd': 700, 'advice': '結球を助けるひと手間！', 'what': '葉が巻いて球になり始めたら、外側の葉で球を包むように、紐などで軽く縛ってあげます。', 'how': 'こうすることで、葉が綺麗に巻き、締まりの良いハクサイになります。'}, {'gdd': 1000, 'advice': '収穫のタイミングです。', 'what': '球の上部を手で軽く押してみて、固く締まっていたら収穫できます。', 'how': '株元に包丁を入れて、根を切り離して収穫します。'}]
